@@ -81,6 +81,72 @@ CLAUDE.md の「最初に取り組むタスク案」
 
 詳しい使い方は `docs/eval.md`。
 
+### 手順 3 のコードの中身
+
+#### `movie_llm/eval/dataset.py`（ベンチマークの読み込み）
+
+- `load_dataframe()`: Hugging Face から parquet ファイルを `data/jvqa/` に落として pandas の DataFrame にする。先頭に `idx` 列（0〜799 の行番号）を足す。配布データに問題 ID が無いので、この番号を ID 代わりに使う
+- `load_items()`: 上の DataFrame を「1問 = 1つの dict」のリストに変える。`choices` は numpy の配列で来るので、普通の `list[str]` に直す。以降のコードはすべてこのリストを使う
+
+```python
+items = load_items()
+items[2]
+# {'idx': 2, 'video_id': 'WYzLvf78-sA', 'question': '粘土で作られた2つのオブジェは…',
+#  'answer': 'B', 'type': 'multi_choice', 'choices': ['A) 1回', 'B) 2回', 'C) 3回', 'D) 4回'], ...}
+```
+
+#### `movie_llm/eval/rules.py`（規則採点）
+
+モデルの出力文字列から「どの選択肢を選んだか」を取り出し、正解と比べる。正解なら 3、不正解なら 1 を返す（公式の 1〜3 点の尺度に合わせるため）。
+
+- `normalize(text)`: 全角の `Ｃ` を半角の `C` にし、前後の空白を落とす。以降の比較はすべてこの正規化後の文字列で行う
+- `split_choices(choices)`: `['A) 1回', 'B) 2回']` を `{'A': '1回', 'B': '2回'}` に分ける。正規表現 `^([A-D])\s*[\)\.．:：、）]\s*(.*)$` で「記号 + 区切り + 本文」に分解している
+- `gold_letter(answer, choices)`: 正解ラベルを A〜D に揃える。普通は `'B'` がそのまま返る。idx 698 のように正解が `'9種類'` と本文で書かれている場合は、`split_choices` の本文と突き合わせて `'C'` に直す
+- `extract_choice(prediction, choices)`: 本体。次の順で試し、最初に決まったものを返す。どれも当たらなければ `None`
+  1. 文頭の記号（`_LEAD`）。`"C) 9種類"` や `"**D**"` から C や D を取る。ただし本文中に他の記号も単独で出てくる場合（`"AかB"`）は採らない。`_STANDALONE` で単独の記号を数えて 1種類のときだけ採用する
+  2. 「答え: X」「正解はX」「Answer: (X)」の形（`_TAG`）
+  3. 本文中の `(X)` や `X)` が 1種類だけある場合（`_PAREN`）
+  4. 選択肢の本文が 1つだけ含まれている場合。`"トッピングは9種類ありました"` なら C の本文 `9種類` が含まれるので C。`"10種類"` のように複数の本文が部分一致する場合は最長一致を採る
+- `extract_yes_no(prediction)`: `いいえ`, `はい`, `yes`, `no` のうち文字列中で最初に出てくるものを採る。英単語は前後が英字でない場合だけ数える（`Nothing` を `No` と誤読しないため）
+- `score_rule(item, prediction)`: 問題の `type` を見て上の関数を呼び分ける。`multi_choice` なら `extract_choice` と `gold_letter` を比べ、`yes_no` なら `extract_yes_no` と正解を比べる。`open` や正解ラベルが壊れている問題は `None`（審判モデルに回す）
+
+#### `movie_llm/eval/judge.py`（GPT-4o 採点）
+
+公式サンプルと同じ文字列を組み立てて OpenAI API を呼ぶ。
+
+- `SYSTEM_PROMPT`: 公式のシステムプロンプトをそのままコピーしたもの
+- `format_choices(choices)`: 公式は Python のリストを `str()` した文字列（`"['A) 1回', 'B) 2回']"`）を渡しているので同じにする。選択肢が無ければ `"なし"`
+- `user_prompt(...)`: 「質問: / 解答: / 選択肢: / モデルの回答:」の 4行を公式と同じ並びで作る
+- `cache_key(...)`: モデル名・質問・正解・選択肢・予測の 5つを JSON にして SHA-256 を取る。同じ入力なら同じキーになるので、採点済みかどうかをこれで判定する
+- `class Judge`:
+  - `__init__`: キャッシュファイル `results/judge_cache.jsonl` を読み込んで dict にする。OpenAI のクライアントはここでは作らない（API キーが無くても import できるように）
+  - `_get_client()`: 最初に必要になったときだけ `.env` を読んでクライアントを作る
+  - `_call(...)`: 実際に API を呼ぶ。`temperature=0`、`response_format={"type": "json_object"}` は公式と同じ。失敗したら 2秒、4秒、8秒…と間隔を倍にして最大5回やり直す
+  - `score(...)`: キャッシュにあればそれを返し、なければ `_call` してキャッシュに追記する
+  - `score_many(jobs)`: `ThreadPoolExecutor` で 4本並列に `score` を呼ぶ。API 待ちが大半なので並列にすると速い
+
+#### `movie_llm/eval/report.py`（集計）
+
+- `md_table(df)`: DataFrame を Markdown の表にする。pandas の `to_markdown` は別パッケージが要るので自前で書いた
+- `summarize(df, by)`: `final_score` 列から、公式表と同じ「Avg, Score 1, Score 2, Score 3」と正解率（3点の割合）を出す。`by="category"` のように指定すると、その列でグループ分けして出す
+- `build_report(rows, title)`: 全体、type 別、category 別、domain 別、duration 別の表を並べる。規則採点と審判採点の両方がある問題については一致率も出す。規則採点で記号を読み取れなかった出力の例も載せる（プロンプトの改善に使う）
+
+#### `scripts/jvqa_eval.py`（採点コマンド）
+
+`main()` の流れ:
+
+1. `load_items()` で 800問を読む
+2. `read_predictions()` で予測 JSONL を `{idx: 予測文字列}` の dict にする
+3. 予測が無い問題は除く（`--all` を付けると空文字として 1点扱いにする）
+4. 1問ずつ `score_rule` を呼び、`rule_score` を付ける。読み取った記号も `rule_extracted` として残す
+5. `--judge` が付いていれば `Judge.score_many` で審判の点 `judge_score` を付ける。`--judge-only-open` なら規則採点できなかった問題だけ送る
+6. `final_score` = 審判の点があればそれ、なければ規則採点の点
+7. `results/<name>/items.jsonl` に 1問ずつ書き、`report.md` に表を書く
+
+#### `scripts/jvqa_trivial_baselines.py`
+
+800問すべてに同じ答え（4択は B、yes_no は はい、open は空）を書いた予測ファイルを `results/always_B/predictions.jsonl` に作るだけ。`jvqa_eval.py` に渡せば「常に B」の点が出る。
+
 ## 手順 4: 手元で Qwen3-VL を動かした
 
 **やったこと**: MacBook Pro (M2 Pro, 16GB) で Qwen3-VL-2B-Instruct を動かし、動画に質問できることを確かめた。
@@ -114,6 +180,60 @@ CLAUDE.md の「最初に取り組むタスク案」
 **4B について**: 重み 8.3GB の読み込みは 16秒で済んだが、推論が進まなかった。この機械では別のプロセスが 10GB 以上使っていてスワップが満杯だったため。4B は他のアプリを閉じて再試行するか、クラウド GPU で動かす。手元の開発は 2B で進める。
 
 詳しくは `docs/local_inference.md`。
+
+### 手順 4 のコードの中身
+
+#### `movie_llm/infer/video.py`（フレームの抜き出し）
+
+transformers 5.x は動画ファイルを torchcodec で読もうとするが Mac では入れにくい。そこで PyAV で自前に読む。
+
+- `probe(path)`: 動画を開いて、フレームレート（fps）、総フレーム数、長さ（秒）、縦横のサイズを返す。総フレーム数がコンテナに書かれていない動画もあるので、その場合は `長さ × fps` で見積もる
+- `sample_frames(path, num_frames, max_side)`:
+  1. `np.linspace(0, 総フレーム数-1, num_frames)` で等間隔なフレーム番号を決める。たとえば 1000 フレームの動画から 16枚なら 0, 67, 133, …, 999
+  2. 動画を先頭から順にデコードし、目当ての番号のフレームだけ取り出す。`max_side=640` なら長辺が 640px を超えるフレームは縮小する（メモリ節約）
+  3. 取り出したフレームを `(枚数, 高さ, 幅, 3)` の uint8 配列に積む
+  4. `VideoMetadata`（fps と各フレームの元の番号）を一緒に返す。Qwen3-VL はこれを使って「<2.3 seconds>」のような時刻を各フレームの前に挿入する。時刻を正しく渡さないと、時間に関する質問の精度が落ちる
+
+#### `movie_llm/infer/qwen3vl.py`（モデルの読み込みと質問）
+
+- `pick_device(device)`: CUDA があれば `cuda`、Mac の GPU なら `mps`、どちらも無ければ `cpu`。クラウドの GPU でも同じコードが動くようにするため
+- `build_prompt(question, qtype, choices)`: 問題の種類ごとに指示文を作る。4択なら選択肢を並べて「記号だけ答えて」、yes_no なら「はいかいいえで」、open なら「簡潔に」。規則採点で読み取りやすい形で答えさせるのが目的
+- `GenResult`: 1回の推論の結果。出力文字列、動画トークン数、入力トークン数、かかった秒数
+- `class Qwen3VL`:
+  - `__init__`:
+    - `AutoProcessor.from_pretrained` でトークナイザと画像・動画の前処理器を読む
+    - `processor.video_processor.size` を書き換えて、1フレームあたりの画素数の上限を `256 × 28 × 28` にする。これが動画トークン数を決める。小さくすると速くなるが粗くなる
+    - `AutoModelForImageTextToText.from_pretrained` で重みを読み、`bfloat16` にして GPU に載せる。`eval()` で推論モードにする
+  - `ask(video_path, prompt)`:
+    1. `sample_frames` でフレームとメタデータを取る
+    2. `messages` を「動画 + 文章」の形で作り、`apply_chat_template` で Qwen の会話形式の文字列にする。この時点では動画の位置に目印のトークンが 1つ入るだけ
+    3. `processor(text=..., videos=[frames], video_metadata=[meta], do_sample_frames=False)` でトークン ID と画素のテンソルにする。目印のトークンがここで数百〜千数百個の動画トークンに置き換わる。`do_sample_frames=False` は「もう抜き出し済みなので再サンプリングしない」という指定
+    4. `model.generate(..., do_sample=False)` で貪欲法（毎回いちばん確率の高いトークンを選ぶ）で生成する。評価では再現性が要るので乱数を使わない
+    5. 出力テンソルのうち入力の長さより後ろが新しく生成された部分なので、そこだけ `decode` して文字列にする
+    6. 入力 ID の中で動画トークンの ID と一致する数を数え、動画トークン数として記録する（コストの目安）
+
+#### `movie_llm/infer/fetch.py`（動画の取得）
+
+- `video_path(video_id)`: `data/jvqa/videos/<id>.mp4` などが既にあればそのパス
+- `fetch(video_id)`: 無ければ `yt-dlp` を `subprocess` で呼んで取得する。フォーマット指定 `bv*[ext=mp4][vcodec^=avc1][height<=480]/...` は「映像だけ、mp4、H.264、480p 以下」の意味。映像と音声を結合しないので ffmpeg が要らない。失敗したら `None`
+
+#### `scripts/smoke_test.py`
+
+合成動画（`data/samples/synthetic.mp4`）に 3つの質問をして、答えと秒数を表示するだけ。環境が壊れていないかを 30秒で確認するためのもの。
+
+#### `scripts/jvqa_predict.py`（ベンチマークの予測）
+
+`main()` の流れ:
+
+1. `load_items()` で読み、`--idx` `--type` `--duration` `--limit` で対象を絞る
+2. `results/<name>/predictions.jsonl` が既にあれば、その中の `idx` は済みとして飛ばす（途中から再開できる）
+3. `Qwen3VL` を 1回だけ読み込む
+4. 1問ずつ: `fetch` で動画を用意 → `build_prompt` → `model.ask` → 結果を 1行の JSON にして追記。1問ごとに `flush` するので、途中で止めても書いた分は残る
+5. 動画が取れない、推論でエラー、のどちらも「その問題を飛ばす」だけで全体は止めない
+
+#### `scripts/jvqa_fetch_videos.py`（全動画の取得）
+
+800問から重複を除いた 428本の `video_id` を、短い動画を先に並べて順に `yt-dlp` で取る。1本ごとに `data/jvqa/video_status.jsonl` に成功か失敗か（と失敗理由）を書く。既にあるファイルと、以前失敗した ID は飛ばす。2秒ずつ間隔を空けている。
 
 ## つまずいた点と対処
 
