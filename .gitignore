@@ -3,3 +3,5 @@ __pycache__/
 data/jvqa/
 *.pyc
 .DS_Store
+.env
+results/

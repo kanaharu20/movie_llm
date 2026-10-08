@@ -13,15 +13,8 @@ from collections import Counter
 from pathlib import Path
 
 import pandas as pd
-from huggingface_hub import hf_hub_download
 
-REPO = "nablasinc/Japanese_Video-QA"
-PARQUET = "data/test-00000-of-00001.parquet"
-
-
-def load(local_dir: Path) -> pd.DataFrame:
-    path = hf_hub_download(REPO, PARQUET, repo_type="dataset", local_dir=str(local_dir))
-    return pd.read_parquet(path)
+from movie_llm.eval.dataset import REPO, load_dataframe as load
 
 
 def md_table(df: pd.DataFrame, index_name: str | None = None) -> str:

@@ -8,7 +8,7 @@
 
 ## 現在の状態
 
-評価ベンチマークの分析段階。モデルの学習・デモはまだ無い。
+評価ベンチマークの分析と評価基盤ができた段階。モデルの推論・学習・デモはまだ無い。
 
 ## セットアップ
 
@@ -25,6 +25,16 @@ uv run python scripts/jvqa_stats.py
 ```
 
 `nablasinc/Japanese_Video-QA` を `data/jvqa/` にダウンロードし、形式・カテゴリ・領域別の内訳を `docs/jvqa_stats.md` に書き出す。結果は [docs/jvqa_stats.md](docs/jvqa_stats.md)。
+
+## 評価
+
+```bash
+uv run pytest                                   # 採点規則のテスト
+uv run python scripts/jvqa_trivial_baselines.py  # 「常に B」などの自明なベースラインを作る
+uv run python scripts/jvqa_eval.py --predictions results/always_B/predictions.jsonl --name always_B
+```
+
+予測ファイルの形式、GPT-4o 審判の使い方、自明なベースラインの値は [docs/eval.md](docs/eval.md) を参照。
 
 ## ライセンス
 
