@@ -4,7 +4,7 @@
 
 番組制作会社のディレクターが、外部に出せない未公開の収録素材から「〇〇が△△している場面」を日本語で探せるようになり、素材確認にかかる時間を大幅に減らせる。
 
-プロジェクトの説明は [indx-proposal.md](indx-proposal.md) を参照。
+プロジェクトの説明は [indx-proposal.md](indx-proposal.md)、これまでの作業の記録は [docs/progress.md](docs/progress.md) を参照。
 
 ## 現在の状態
 
