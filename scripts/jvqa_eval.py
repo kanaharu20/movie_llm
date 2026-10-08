@@ -41,6 +41,7 @@ def main() -> None:
     ap.add_argument("--judge-model", default="gpt-4o")
     ap.add_argument("--judge-only-open", action="store_true", help="審判は open と規則採点できない問題だけに使う（API 節約）")
     ap.add_argument("--limit", type=int, default=None, help="先頭 N 問だけ採点")
+    ap.add_argument("--all", action="store_true", help="予測が無い問題も空文字として採点する（既定は予測がある問題だけ）")
     ap.add_argument("--data-dir", default="data/jvqa")
     args = ap.parse_args()
 
@@ -49,8 +50,11 @@ def main() -> None:
         items = items[: args.limit]
     preds = read_predictions(Path(args.predictions))
     missing = [it["idx"] for it in items if it["idx"] not in preds]
-    if missing:
+    if missing and args.all:
         print(f"警告: 予測が無い問題が {len(missing)} 件。空文字として採点する（例: {missing[:5]}）")
+    elif missing:
+        print(f"予測がある {len(items) - len(missing)} 問だけを採点する（全体 {len(items)} 問）")
+        items = [it for it in items if it["idx"] in preds]
 
     rows = []
     for it in items:

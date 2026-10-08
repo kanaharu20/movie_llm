@@ -15,7 +15,10 @@ from __future__ import annotations
 import argparse
 import json
 import time
+import functools
 from pathlib import Path
+
+print = functools.partial(print, flush=True)  # ログにリダイレクトしても逐次出すため
 
 from movie_llm.eval.dataset import load_items
 from movie_llm.infer.fetch import fetch, video_path
