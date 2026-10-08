@@ -8,7 +8,7 @@
 
 ## 現在の状態
 
-評価ベンチマークの分析と評価基盤ができた段階。モデルの推論・学習・デモはまだ無い。
+評価基盤と、手元 (MacBook Pro M2 Pro, 16GB) での Qwen3-VL 推論ができた段階。学習・デモはまだ無い。
 
 ## セットアップ
 
@@ -25,6 +25,17 @@ uv run python scripts/jvqa_stats.py
 ```
 
 `nablasinc/Japanese_Video-QA` を `data/jvqa/` にダウンロードし、形式・カテゴリ・領域別の内訳を `docs/jvqa_stats.md` に書き出す。結果は [docs/jvqa_stats.md](docs/jvqa_stats.md)。
+
+## 推論（手元での動作確認）
+
+```bash
+uv run python scripts/smoke_test.py                        # 合成動画で Qwen3-VL-2B が動くか確認（MPS）
+uv run python scripts/jvqa_predict.py --name qwen3vl-2b_f16 --type multi_choice --duration short --limit 20
+```
+
+`jvqa_predict.py` は動画が無ければ `yt-dlp` で `data/jvqa/videos/` に取得し（映像のみ・480p以下）、予測を `results/<name>/predictions.jsonl` に追記する。途中で止めても再開できる。`yt-dlp` は `uv tool install yt-dlp` で入れる。
+
+動画のフレーム抜き出しは PyAV で自前に行う（[movie_llm/infer/video.py](movie_llm/infer/video.py)）。transformers 5.x の既定のデコードは torchcodec 前提で、macOS では入れにくいため。
 
 ## 評価
 

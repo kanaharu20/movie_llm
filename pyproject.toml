@@ -3,11 +3,17 @@ name = "movie-llm"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-    "huggingface-hub>=2.1.1",
+    "accelerate>=1.0",
+    "av>=14",
+    "huggingface-hub>=1.0",
     "openai>=3.26.1",
     "pandas>=3.0.6",
+    "pillow>=10",
     "pyarrow>=25.0.1",
     "python-dotenv>=1.2.4",
+    "torch>=2.9",
+    "torchvision>=0.24",
+    "transformers>=5.0",
 ]
 
 [dependency-groups]

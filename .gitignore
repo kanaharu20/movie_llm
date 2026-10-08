@@ -5,3 +5,4 @@ data/jvqa/
 .DS_Store
 .env
 results/
+data/samples/*.mp4
