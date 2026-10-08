@@ -1,0 +1,5 @@
+.venv/
+__pycache__/
+data/jvqa/
+*.pyc
+.DS_Store

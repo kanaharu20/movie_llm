@@ -1,0 +1,9 @@
+[project]
+name = "movie-llm"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "huggingface-hub>=2.1.1",
+    "pandas>=3.0.6",
+    "pyarrow>=25.0.1",
+]
