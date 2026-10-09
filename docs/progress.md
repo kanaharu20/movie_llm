@@ -272,9 +272,29 @@ transformers 5.x は動画ファイルを torchcodec で読もうとするが Ma
 - 規則採点と GPT-4o の一致率は 98.3%（4択・yes_no 232問）。不一致 4件はすべて GPT-4o 側の誤り。以後 GPT-4o は open にだけ使う
 - 1問 平均 5 秒。800問の予測に約 1時間、GPT-4o 採点は open 約 500問で数百円
 
+## 手順 6: フレーム数を変えて測る（進行中）
+
+学習に入る前に、入力の設定だけでどれだけ変わるかを確かめる。2B の 4択・yes_no 232問を、フレーム数 16、32、64 で比べる。規則採点のみ。
+
+| 区分 | 16フレーム | 32フレーム | 64フレーム |
+|---|---|---|---|
+| 4択 | 59.1% | 67.3% | （実行中） |
+| count | 51.0% | 60.8% | |
+| temporal | 59.2% | 69.4% | |
+| medium | 58.4% | 66.3% | |
+| 1問の秒数 | 5.2 | 8.2 | 約 18 |
+
+- フレームを倍にするだけで 4択が 8 ポイント上がった。count と temporal の伸びが大きく、「取りこぼし」の見立てと合う
+
 ## 今動いているもの
 
-- 無し。2B のベースラインは 722問すべて済み
+- 64フレームの予測を途中で止めている（4択 241問中 約150問まで済み）。再開は次のコマンド。済みの問題は飛ばして続きから進む
+
+```bash
+uv run python scripts/jvqa_predict.py --name qwen3vl-2b_f64 --frames 64 --type multi_choice --no-fetch
+uv run python scripts/jvqa_predict.py --name qwen3vl-2b_f64 --frames 64 --type yes_no --no-fetch
+uv run python scripts/jvqa_eval.py --predictions results/qwen3vl-2b_f64/predictions.jsonl --name qwen3vl-2b_f64
+```
 
 ## 分かってきた注意点
 
