@@ -288,7 +288,7 @@ transformers 5.x は動画ファイルを torchcodec で読もうとするが Ma
 
 ## 今動いているもの
 
-- 64フレームの予測を途中で止めている（4択 241問中 約150問まで済み）。再開は次のコマンド。済みの問題は飛ばして続きから進む
+- 64フレームの予測を途中で止めている（4択 241問中 225問まで済み。残りは 4択 16問と yes_no 17問で、再開すれば 5分ほど）。再開は次のコマンド。済みの問題は飛ばして続きから進む
 
 ```bash
 uv run python scripts/jvqa_predict.py --name qwen3vl-2b_f64 --frames 64 --type multi_choice --no-fetch
