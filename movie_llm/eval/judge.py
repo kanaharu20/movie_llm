@@ -97,10 +97,10 @@ class Judge:
 
     def _get_client(self):
         if self._client is None:
-            from dotenv import load_dotenv
+            from dotenv import find_dotenv, load_dotenv
             from openai import OpenAI
 
-            load_dotenv()
+            load_dotenv(find_dotenv(usecwd=True))
             key = os.getenv(self.api_key_env)
             if not key and not self.base_url:
                 raise RuntimeError(f"{self.api_key_env} が設定されていません (.env または環境変数)")
