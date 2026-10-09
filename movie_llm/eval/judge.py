@@ -2,6 +2,8 @@
 
 - モデル: gpt-4o、temperature 0、JSON 出力
 - システムプロンプトと入力の並びは公式と同一
+- 接続先は OpenAI 互換ならどこでもよい（Vercel AI Gateway、LM Studio、Ollama など）。
+  base_url と API キーの環境変数名を指定する。公式値と比べるときだけ OpenAI の gpt-4o を使う
 - 選択肢は Python のリスト表記 (str(list)) で渡す。open 問題は "なし"
 - 結果は JSONL にキャッシュし、同じ入力には API を呼ばない
 """
@@ -62,8 +64,12 @@ class Judge:
         cache_path: Path | str = "results/judge_cache.jsonl",
         max_workers: int = 4,
         max_retries: int = 5,
+        base_url: str | None = None,
+        api_key_env: str = "OPENAI_API_KEY",
     ) -> None:
         self.model = model
+        self.base_url = base_url
+        self.api_key_env = api_key_env
         self.cache_path = Path(cache_path)
         self.max_workers = max_workers
         self.max_retries = max_retries
@@ -95,10 +101,17 @@ class Judge:
             from openai import OpenAI
 
             load_dotenv()
-            if not os.getenv("OPENAI_API_KEY"):
-                raise RuntimeError("OPENAI_API_KEY が設定されていません (.env または環境変数)")
-            self._client = OpenAI()
+            key = os.getenv(self.api_key_env)
+            if not key and not self.base_url:
+                raise RuntimeError(f"{self.api_key_env} が設定されていません (.env または環境変数)")
+            # ローカルサーバー (LM Studio, Ollama) はキー不要なことが多いので、無ければダミーを入れる
+            self._client = OpenAI(api_key=key or "none", base_url=self.base_url)
         return self._client
+
+    @property
+    def cache_model_name(self) -> str:
+        """キャッシュのキーに使うモデル名。接続先が違えば別物として扱う。"""
+        return f"{self.base_url or 'openai'}::{self.model}"
 
     def _call(self, question: str, answer: str, choices: str, prediction: str) -> int:
         client = self._get_client()
@@ -129,11 +142,11 @@ class Judge:
 
     def score(self, question: str, answer: str, prediction: str, choices: list[str]) -> int:
         choices_str = format_choices(choices)
-        key = cache_key(self.model, question, answer, choices_str, prediction)
+        key = cache_key(self.cache_model_name, question, answer, choices_str, prediction)
         if key in self._cache:
             return self._cache[key]
         score = self._call(question, answer, choices_str, prediction)
-        self._append_cache(key, score, {"model": self.model, "question": question, "prediction": prediction})
+        self._append_cache(key, score, {"model": self.cache_model_name, "question": question, "prediction": prediction})
         return score
 
     def score_many(self, jobs: list[tuple[str, str, str, list[str]]]) -> list[int]:

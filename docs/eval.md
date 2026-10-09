@@ -35,7 +35,23 @@ uv run python scripts/jvqa_eval.py --predictions ... --name foo --judge --judge-
 
 # まず少数で試す
 uv run python scripts/jvqa_eval.py --predictions ... --name foo --judge --limit 20
+
+# Vercel AI Gateway 経由で GPT-4o を使う（.env に AI_GATEWAY_API_KEY）
+uv run python scripts/jvqa_eval.py --predictions ... --name foo --judge \
+    --judge-base-url https://ai-gateway.vercel.sh/v1 --judge-api-key-env AI_GATEWAY_API_KEY --judge-model openai/gpt-4o
+
+# LM Studio / Ollama のローカルモデルを審判にする（キー不要）
+uv run python scripts/jvqa_eval.py --predictions ... --name foo --judge \
+    --judge-base-url http://localhost:1234/v1 --judge-model <モデル名>
 ```
+
+## 審判モデルの選び方
+
+- **公式表と比べる数値**を出すときだけ GPT-4o が必要。審判が違うと数ポイント単位でずれる
+- **自分の実験どうしの比較**（学習前後、2B と 4B）は、全条件で同じ審判を使えば何でもよい。open の答えは中央値 3 文字と短く、判定は易しい
+- 接続先は OpenAI 互換なら何でもよい。Vercel AI Gateway はモデル名が `openai/gpt-4o` のように `提供元/モデル` の形。LM Studio や Ollama はローカルで無料
+- キャッシュのキーには接続先とモデル名の両方が入るので、審判を変えると再採点になる（混ざらない）
+- 最終的にはローカル審判と GPT-4o の一致率を 50 問程度で測り、高ければ以降はローカル審判で代用する
 
 出力は `results/<name>/items.jsonl`（問題ごとの点）と `results/<name>/report.md`（全体・type・category・domain・duration 別の表）。
 

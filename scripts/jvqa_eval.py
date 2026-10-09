@@ -7,6 +7,12 @@
     uv run python scripts/jvqa_eval.py --predictions results/foo/predictions.jsonl --name foo
     uv run python scripts/jvqa_eval.py --predictions ... --name foo --judge          # GPT-4o でも採点（要 OPENAI_API_KEY）
     uv run python scripts/jvqa_eval.py --predictions ... --name foo --judge --limit 20
+    # Vercel AI Gateway 経由（.env に AI_GATEWAY_API_KEY）
+    uv run python scripts/jvqa_eval.py --predictions ... --name foo --judge \
+        --judge-base-url https://ai-gateway.vercel.sh/v1 --judge-api-key-env AI_GATEWAY_API_KEY --judge-model openai/gpt-4o
+    # LM Studio のローカルモデル
+    uv run python scripts/jvqa_eval.py --predictions ... --name foo --judge \
+        --judge-base-url http://localhost:1234/v1 --judge-model <LM Studio のモデル名>
 
 出力: results/<name>/items.jsonl（問題ごとの点）と results/<name>/report.md
 """
@@ -38,7 +44,9 @@ def main() -> None:
     ap.add_argument("--predictions", required=True)
     ap.add_argument("--name", required=True, help="results/<name>/ に出力")
     ap.add_argument("--judge", action="store_true", help="GPT-4o でも採点する")
-    ap.add_argument("--judge-model", default="gpt-4o")
+    ap.add_argument("--judge-model", default="gpt-4o", help="例: gpt-4o / openai/gpt-4o (Vercel) / qwen3-8b (LM Studio)")
+    ap.add_argument("--judge-base-url", default=None, help="OpenAI 互換の接続先。例: https://ai-gateway.vercel.sh/v1, http://localhost:1234/v1")
+    ap.add_argument("--judge-api-key-env", default="OPENAI_API_KEY", help="API キーを入れた環境変数の名前。例: AI_GATEWAY_API_KEY")
     ap.add_argument("--judge-only-open", action="store_true", help="審判は open と規則採点できない問題だけに使う（API 節約）")
     ap.add_argument("--limit", type=int, default=None, help="先頭 N 問だけ採点")
     ap.add_argument("--all", action="store_true", help="予測が無い問題も空文字として採点する（既定は予測がある問題だけ）")
@@ -81,7 +89,7 @@ def main() -> None:
         )
 
     if args.judge:
-        judge = Judge(model=args.judge_model)
+        judge = Judge(model=args.judge_model, base_url=args.judge_base_url, api_key_env=args.judge_api_key_env)
         targets = [
             (i, it)
             for i, it in enumerate(items)
