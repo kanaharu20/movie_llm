@@ -58,7 +58,15 @@ class Qwen3VL:
     ) -> None:
         self.device = pick_device(device)
         if dtype is None:
-            dtype = torch.float32 if self.device == "cpu" else torch.bfloat16
+            if self.device == "cpu":
+                dtype = torch.float32
+            elif self.device == "cuda" and not torch.cuda.is_bf16_supported():
+                # T4 など bfloat16 を扱えない GPU では float16 にする。bfloat16 を指定すると数十倍遅くなる
+                dtype = torch.float16
+            else:
+                dtype = torch.bfloat16
+        self.dtype = dtype
+        self.device_name = torch.cuda.get_device_name(0) if self.device == "cuda" else self.device
         self.num_frames = num_frames
         self.max_side = max_side
         self.frames_dir = frames_dir  # フレームキャッシュの置き場。None なら毎回デコード

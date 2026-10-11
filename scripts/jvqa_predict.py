@@ -66,9 +66,9 @@ def main() -> None:
         return
 
     model = Qwen3VL(args.model, device=args.device, num_frames=args.frames, frames_dir=args.frames_dir)
-    print(f"model={args.model} device={model.device} frames={args.frames} load={model.load_seconds:.1f}s")
+    print(f"model={args.model} device={model.device} ({model.device_name}, {model.dtype}) frames={args.frames} load={model.load_seconds:.1f}s")
     (out_dir / "config.json").write_text(
-        json.dumps({"model": args.model, "frames": args.frames, "max_new_tokens": args.max_new_tokens, "device": model.device, "frames_dir": args.frames_dir}, ensure_ascii=False, indent=2)
+        json.dumps({"model": args.model, "frames": args.frames, "max_new_tokens": args.max_new_tokens, "device": model.device, "device_name": model.device_name, "dtype": str(model.dtype), "frames_dir": args.frames_dir}, ensure_ascii=False, indent=2)
     )
 
     t_all = time.time()
