@@ -60,8 +60,10 @@ class Qwen3VL:
         if dtype is None:
             if self.device == "cpu":
                 dtype = torch.float32
-            elif self.device == "cuda" and not torch.cuda.is_bf16_supported():
-                # T4 など bfloat16 を扱えない GPU では float16 にする。bfloat16 を指定すると数十倍遅くなる
+            elif self.device == "cuda" and torch.cuda.get_device_capability(0)[0] < 8:
+                # Ampere (A100, L4 など compute capability 8.0) より前の GPU (T4 = 7.5) は bfloat16 を
+                # ハードウェアで扱えず、指定すると数十倍遅くなる。is_bf16_supported() はエミュレーションでも
+                # True を返すので使わず、世代で判定する
                 dtype = torch.float16
             else:
                 dtype = torch.bfloat16
