@@ -290,7 +290,10 @@ transformers 5.x は動画ファイルを torchcodec で読もうとするが Ma
 
 ## 今動いているもの
 
-- 無し
+- 無し（PC を閉じるため停止）。次に開いたときにやること:
+  1. 選択肢の翻訳の続き。LM Studio を起動して `lms server start` → `lms load lmstudio-community/Qwen3-8B-MLX-4bit --gpu max -y --identifier qwen3-8b` → `uv run python scripts/pt_translate.py --what options --batch 20`（済みの分は飛ばす。残り約 60 分）
+  2. 翻訳が終わったら `uv run python scripts/pt_convert.py` で学習用の `data/perception_test/items.jsonl` を作る
+  3. Perception Test の映像（26.5GB）は手元では 1MB/s しか出ないので、Colab で取得してフレームだけ Drive に残す。ノートブックを別途作る
 
 ## 分かってきた注意点
 

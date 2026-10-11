@@ -24,6 +24,11 @@ DATA = Path("data/perception_test")
 CACHE = DATA / "translations.json"
 LETTER_Q = re.compile(r"\bletters?\b|\bword\b", re.I)
 
+def is_letter_sequence(option: str) -> bool:
+    """文字並べ問題の選択肢（'bad', 'dab', 'b, a, d', 'gt'）かどうか。英語の語句は False。"""
+    toks = [t.strip() for t in option.split(",")]
+    return all(re.fullmatch(r"[a-z]{1,5}", t) for t in toks) and option.lower() not in {"yes", "no", "none"}
+
 SYSTEM = """/no_think
 あなたは映像理解ベンチマークの翻訳者です。英語の短い文や句を自然な日本語に訳します。
 - 動画について問う文です。「the person」は「人物」、「the camera」は「カメラ」と訳す
@@ -87,8 +92,8 @@ def main() -> None:
     if args.what == "questions":
         targets = sorted({q["question"] for q in qs})
     else:
-        # 文字並べの問いに出てくる選択肢は訳さない
-        letter_opts = {o for q in qs if LETTER_Q.search(q["question"]) for o in q["options"]}
+        # 文字並べの問いに出てくる文字列そのもの（bad, dab など）は訳さない。Yes/No などの語は訳す
+        letter_opts = {o for q in qs if LETTER_Q.search(q["question"]) for o in q["options"] if is_letter_sequence(o)}
         targets = sorted({o for q in qs for o in q["options"] if o not in letter_opts and not re.fullmatch(r"\d+", o)})
         print(f"文字並べの選択肢 {len(letter_opts)} 種は訳さない")
     cache = load_cache()

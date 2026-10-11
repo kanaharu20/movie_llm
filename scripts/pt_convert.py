@@ -29,6 +29,11 @@ DATA = Path("data/perception_test")
 LETTER_Q = re.compile(r"\bletters?\b|\bword\b", re.I)
 LETTERS = "ABC"
 
+def is_letter_sequence(option: str) -> bool:
+    """文字並べ問題の選択肢（'bad', 'dab', 'b, a, d', 'gt'）かどうか。英語の語句は False。"""
+    toks = [t.strip() for t in option.split(",")]
+    return all(re.fullmatch(r"[a-z]{1,5}", t) for t in toks) and option.lower() not in {"yes", "no", "none"}
+
 # Perception Test の tag/area/reasoning → ベンチマークの category
 def to_category(q: dict) -> str:
     tags = set(q["tag"])
@@ -64,7 +69,7 @@ def main() -> None:
         opts_ja = []
         ok = True
         for o in q["options"]:
-            if is_letter or re.fullmatch(r"\d+", o):
+            if (is_letter and is_letter_sequence(o)) or re.fullmatch(r"\d+", o):
                 opts_ja.append(o)
             elif o in o_ja:
                 opts_ja.append(o_ja[o])
