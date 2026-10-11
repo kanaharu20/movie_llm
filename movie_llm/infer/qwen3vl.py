@@ -99,3 +99,36 @@ class Qwen3VL:
         video_token_id = self.model.config.video_token_id
         n_video = int((inputs["input_ids"] == video_token_id).sum())
         return GenResult(text=text, num_video_tokens=n_video, prompt_tokens=int(inputs["input_ids"].shape[1]), seconds=time.time() - t0)
+
+    @torch.inference_mode()
+    def sample(
+        self,
+        video_path: str,
+        prompt: str,
+        n: int = 8,
+        temperature: float = 1.0,
+        top_p: float = 1.0,
+        max_new_tokens: int = 32,
+        num_frames: int | None = None,
+    ) -> list[str]:
+        """同じ入力に対して n 本の回答をサンプリングする（GRPO の下見、問題の難しさの測定用）。
+
+        動画部分の計算は 1 回で済ませ、言語モデルの生成だけを n 本に広げる（num_return_sequences）。
+        """
+        frames, meta = sample_frames_cached(video_path, num_frames or self.num_frames, self.max_side, self.frames_dir)
+        messages = [{"role": "user", "content": [{"type": "video"}, {"type": "text", "text": prompt}]}]
+        text = self.processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+        inputs = self.processor(
+            text=[text], videos=[frames], video_metadata=[meta], do_sample_frames=False, return_tensors="pt"
+        ).to(self.device)
+        out = self.model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            do_sample=True,
+            temperature=temperature,
+            top_p=top_p,
+            num_return_sequences=n,
+        )
+        start = inputs["input_ids"].shape[1]
+        return [self.processor.decode(o[start:], skip_special_tokens=True).strip() for o in out]
+
