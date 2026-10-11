@@ -50,23 +50,28 @@ def save_cache(c: dict[str, str]) -> None:
 def translate_batch(client: OpenAI, model: str, items: list[str], retries: int = 3) -> list[str]:
     user = "次の英語を日本語に訳してください。\n" + json.dumps({"inputs": items}, ensure_ascii=False)
     for attempt in range(retries):
-        r = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}],
-            temperature=0,
-            response_format={
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "translations",
-                    "schema": {
-                        "type": "object",
-                        "properties": {"translations": {"type": "array", "items": {"type": "string"}}},
-                        "required": ["translations"],
+        try:
+            r = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}],
+                temperature=0,
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "translations",
+                        "schema": {
+                            "type": "object",
+                            "properties": {"translations": {"type": "array", "items": {"type": "string"}}},
+                            "required": ["translations"],
+                        },
                     },
                 },
-            },
-            max_tokens=4000,
-        )
+                max_tokens=4000,
+                )
+        except Exception as e:  # LM Studio 側の一時的なエラー。少し待って再試行
+            print(f"  API エラー、{5 * (attempt + 1)} 秒待つ: {str(e)[:80]}")
+            time.sleep(5 * (attempt + 1))
+            continue
         txt = r.choices[0].message.content or ""
         txt = re.sub(r"<think>.*?</think>", "", txt, flags=re.S).strip()
         try:
@@ -76,7 +81,10 @@ def translate_batch(client: OpenAI, model: str, items: list[str], retries: int =
         except Exception:
             pass
         time.sleep(1)
-    raise RuntimeError(f"翻訳に失敗: {items[:2]}...")
+    if len(items) > 1:  # バッチを半分にして再試行
+        mid = len(items) // 2
+        return translate_batch(client, model, items[:mid], retries) + translate_batch(client, model, items[mid:], retries)
+    raise RuntimeError(f"翻訳に失敗: {items}")
 
 
 def main() -> None:
