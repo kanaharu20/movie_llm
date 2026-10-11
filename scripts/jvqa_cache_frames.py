@@ -12,11 +12,23 @@ import argparse
 import functools
 import shutil
 import time
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 from movie_llm.infer.video import cache_dir, load_frames, sample_frames, save_frames
 
 print = functools.partial(print, flush=True)
+
+
+def _one(job: tuple[str, int, int, str]) -> tuple[str, str | None]:
+    """1 本の動画からフレームを抜いて保存する（並列実行用）。(ファイル名, エラー文) を返す。"""
+    vp, n, max_side, frames_dir = job
+    try:
+        arr, meta = sample_frames(vp, n, max_side=max_side)
+        save_frames(cache_dir(frames_dir, vp, n, max_side), arr, meta)
+        return Path(vp).name, None
+    except Exception as e:
+        return Path(vp).name, str(e)
 
 
 def main() -> None:
@@ -26,27 +38,35 @@ def main() -> None:
     ap.add_argument("--video-dir", default="data/jvqa/videos")
     ap.add_argument("--frames-dir", default="data/jvqa/frames")
     ap.add_argument("--zip", action="store_true", help="フレーム数ごとに zip を作る")
+    ap.add_argument("--workers", type=int, default=1, help="並列数（Colab の CPU なら 2〜4）")
     args = ap.parse_args()
 
     videos = sorted(p for p in Path(args.video_dir).iterdir() if p.suffix in (".mp4", ".webm", ".mkv"))
     print(f"動画 {len(videos)} 本、フレーム数 {args.frames}")
     t0 = time.time()
     for n in args.frames:
-        done = skipped = 0
-        for k, vp in enumerate(videos, 1):
-            d = cache_dir(args.frames_dir, str(vp), n, args.max_side)
-            if load_frames(d) is not None:
-                skipped += 1
-                continue
-            try:
-                arr, meta = sample_frames(str(vp), n, max_side=args.max_side)
-            except Exception as e:
-                print(f"  失敗 {vp.name}: {e}")
-                continue
-            save_frames(d, arr, meta)
-            done += 1
-            if k % 25 == 0:
-                print(f"  [{k}/{len(videos)}] f{n} {time.time() - t0:.0f}s")
+        todo = [vp for vp in videos if load_frames(cache_dir(args.frames_dir, str(vp), n, args.max_side)) is None]
+        skipped = len(videos) - len(todo)
+        done = 0
+        jobs = [(str(vp), n, args.max_side, args.frames_dir) for vp in todo]
+        if args.workers > 1:
+            with ProcessPoolExecutor(max_workers=args.workers) as ex:
+                for k, (name, err) in enumerate(ex.map(_one, jobs, chunksize=4), 1):
+                    if err:
+                        print(f"  失敗 {name}: {err}")
+                    else:
+                        done += 1
+                    if k % 25 == 0:
+                        print(f"  [{k}/{len(todo)}] f{n} {time.time() - t0:.0f}s")
+        else:
+            for k, job in enumerate(jobs, 1):
+                name, err = _one(job)
+                if err:
+                    print(f"  失敗 {name}: {err}")
+                else:
+                    done += 1
+                if k % 25 == 0:
+                    print(f"  [{k}/{len(todo)}] f{n} {time.time() - t0:.0f}s")
         print(f"f{n}: 作成 {done}、既存 {skipped}")
         if args.zip:
             # zip の中身は <video_id>/f<N>_s<side>/... になるよう、一時ディレクトリに該当サブフォルダだけ集める
