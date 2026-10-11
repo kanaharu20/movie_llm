@@ -37,6 +37,14 @@ uv run python scripts/jvqa_predict.py --name qwen3vl-2b_f16 --type multi_choice 
 
 動画のフレーム抜き出しは PyAV で自前に行う（[movie_llm/infer/video.py](movie_llm/infer/video.py)）。transformers 5.x の既定のデコードは torchcodec 前提で、macOS では入れにくいため。
 
+## フレームキャッシュと Colab
+
+```bash
+uv run python scripts/jvqa_cache_frames.py --frames 16 32 --zip   # 全動画から JPEG フレームを抜き、zip も作る
+```
+
+動画のデコードは CPU が重いので、一度抜いたフレームを `data/jvqa/frames/` に置いて使い回す。`jvqa_predict.py --frames-dir data/jvqa/frames` で読む。Colab で 4B のベース記録を取る手順は [notebooks/colab_baseline_4b.ipynb](notebooks/colab_baseline_4b.ipynb)。zip を Drive に上げて上から実行する。
+
 ## 評価
 
 ```bash

@@ -37,6 +37,9 @@ def main() -> None:
     ap.add_argument("--duration", choices=["short", "medium"])
     ap.add_argument("--limit", type=int)
     ap.add_argument("--no-fetch", action="store_true", help="動画が無い問題は飛ばす（取得しない）")
+    ap.add_argument("--video-dir", default="data/jvqa/videos", help="動画の置き場（Colab では Drive のパス）")
+    ap.add_argument("--frames-dir", default=None, help="フレームキャッシュの置き場。例: data/jvqa/frames。指定するとデコードを省ける")
+    ap.add_argument("--out-dir", default="results", help="出力先のルート（Colab では Drive のパス）")
     args = ap.parse_args()
 
     items = load_items()
@@ -50,7 +53,7 @@ def main() -> None:
     if args.limit:
         items = items[: args.limit]
 
-    out_dir = Path("results") / args.name
+    out_dir = Path(args.out_dir) / args.name
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / "predictions.jsonl"
     done: set[int] = set()
@@ -62,16 +65,17 @@ def main() -> None:
     if not todo:
         return
 
-    model = Qwen3VL(args.model, device=args.device, num_frames=args.frames)
+    model = Qwen3VL(args.model, device=args.device, num_frames=args.frames, frames_dir=args.frames_dir)
     print(f"model={args.model} device={model.device} frames={args.frames} load={model.load_seconds:.1f}s")
     (out_dir / "config.json").write_text(
-        json.dumps({"model": args.model, "frames": args.frames, "max_new_tokens": args.max_new_tokens, "device": model.device}, ensure_ascii=False, indent=2)
+        json.dumps({"model": args.model, "frames": args.frames, "max_new_tokens": args.max_new_tokens, "device": model.device, "frames_dir": args.frames_dir}, ensure_ascii=False, indent=2)
     )
 
     t_all = time.time()
     with out_path.open("a", encoding="utf-8") as f:
         for k, it in enumerate(todo, 1):
-            vp = video_path(it["video_id"]) if args.no_fetch else fetch(it["video_id"])
+            vdir = Path(args.video_dir)
+            vp = video_path(it["video_id"], vdir) if args.no_fetch else fetch(it["video_id"], vdir)
             if vp is None:
                 print(f"[{k}/{len(todo)}] idx={it['idx']} 動画なし、飛ばす")
                 continue

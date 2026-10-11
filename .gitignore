@@ -6,3 +6,5 @@ data/jvqa/
 .env
 results/
 data/samples/*.mp4
+data/jvqa/frames/
+data/jvqa/*.zip

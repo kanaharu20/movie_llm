@@ -45,3 +45,11 @@
 ## 動画の入手性
 
 20本中3本（15%）が「Video unavailable」「not available」「403」で取れなかった。全428本の取得状況は `scripts/jvqa_fetch_videos.py` が `data/jvqa/video_status.jsonl` に記録する。取れない動画の問題は評価から外れるので、公式値との比較ではその分を明記する必要がある。
+
+## フレームキャッシュ
+
+`movie_llm/infer/video.py` の `sample_frames_cached` は、`<frames_dir>/<動画の stem>/f<フレーム数>_s<長辺>/` に JPEG と meta.json があればそれを読み、無ければ動画から抜いて保存する。JPEG（品質 90）経由でも、直接デコードと同じ答え・同じトークン数になることを 3 問で確認した。1 動画あたり 16 フレームで約 0.7MB。
+
+用途:
+- Colab: 動画 7GB を上げずに、フレームの zip（数百 MB）だけ上げる。Colab 側のデコードもゼロ
+- 学習: 同じフレームを何度も読むので、デコードを 1 回で済ませる

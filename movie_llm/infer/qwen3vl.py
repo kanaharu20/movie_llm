@@ -12,7 +12,7 @@ from dataclasses import dataclass
 import torch
 from transformers import AutoModelForImageTextToText, AutoProcessor
 
-from movie_llm.infer.video import sample_frames
+from movie_llm.infer.video import sample_frames_cached
 
 DEFAULT_MODEL = "Qwen/Qwen3-VL-2B-Instruct"
 
@@ -54,12 +54,14 @@ class Qwen3VL:
         num_frames: int = 16,
         max_pixels: int | None = 256 * 28 * 28,
         max_side: int | None = 640,
+        frames_dir: str | None = None,
     ) -> None:
         self.device = pick_device(device)
         if dtype is None:
             dtype = torch.float32 if self.device == "cpu" else torch.bfloat16
         self.num_frames = num_frames
         self.max_side = max_side
+        self.frames_dir = frames_dir  # フレームキャッシュの置き場。None なら毎回デコード
         self.processor = AutoProcessor.from_pretrained(model_id)
         if max_pixels is not None:
             # 1フレームあたりの上限画素数。小さくするほど速く、粗くなる
@@ -71,7 +73,7 @@ class Qwen3VL:
     @torch.inference_mode()
     def ask(self, video_path: str, prompt: str, max_new_tokens: int = 64, num_frames: int | None = None) -> GenResult:
         t0 = time.time()
-        frames, meta = sample_frames(video_path, num_frames or self.num_frames, max_side=self.max_side)
+        frames, meta = sample_frames_cached(video_path, num_frames or self.num_frames, self.max_side, self.frames_dir)
         messages = [{"role": "user", "content": [{"type": "video"}, {"type": "text", "text": prompt}]}]
         text = self.processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
         inputs = self.processor(
