@@ -30,9 +30,9 @@ LETTER_Q = re.compile(r"\bletters?\b|\bword\b", re.I)
 LETTERS = "ABC"
 
 def is_letter_sequence(option: str) -> bool:
-    """文字並べ問題の選択肢（'bad', 'dab', 'b, a, d', 'gt'）かどうか。英語の語句は False。"""
+    """文字並べ問題の選択肢（'bad', 'dab', 'b, a, d', 'wvVcy', 'doogmai'）かどうか。英語の語句（Yes, No, 文）は False。"""
     toks = [t.strip() for t in option.split(",")]
-    return all(re.fullmatch(r"[a-z]{1,5}", t) for t in toks) and option.lower() not in {"yes", "no", "none"}
+    return all(re.fullmatch(r"[A-Za-z]{1,12}", t) for t in toks) and option.lower() not in {"yes", "no", "none"}
 
 # Perception Test の tag/area/reasoning → ベンチマークの category
 def to_category(q: dict) -> str:

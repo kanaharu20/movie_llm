@@ -25,9 +25,9 @@ CACHE = DATA / "translations.json"
 LETTER_Q = re.compile(r"\bletters?\b|\bword\b", re.I)
 
 def is_letter_sequence(option: str) -> bool:
-    """文字並べ問題の選択肢（'bad', 'dab', 'b, a, d', 'gt'）かどうか。英語の語句は False。"""
+    """文字並べ問題の選択肢（'bad', 'dab', 'b, a, d', 'wvVcy', 'doogmai'）かどうか。英語の語句（Yes, No, 文）は False。"""
     toks = [t.strip() for t in option.split(",")]
-    return all(re.fullmatch(r"[a-z]{1,5}", t) for t in toks) and option.lower() not in {"yes", "no", "none"}
+    return all(re.fullmatch(r"[A-Za-z]{1,12}", t) for t in toks) and option.lower() not in {"yes", "no", "none"}
 
 SYSTEM = """/no_think
 あなたは映像理解ベンチマークの翻訳者です。英語の短い文や句を自然な日本語に訳します。
@@ -68,11 +68,22 @@ def translate_batch(client: OpenAI, model: str, items: list[str], retries: int =
                 },
                 max_tokens=4000,
                 )
-        except Exception as e:  # LM Studio 側の一時的なエラー。少し待って再試行
-            print(f"  API エラー、{5 * (attempt + 1)} 秒待つ: {str(e)[:80]}")
-            time.sleep(5 * (attempt + 1))
-            continue
+        except Exception as e:  # response_format 非対応なら指定なしで、それ以外は少し待って再試行
+            if "response_format" in str(e) or "json_schema" in str(e):
+                r = client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}],
+                    temperature=0,
+                    max_tokens=4000,
+                )
+            else:
+                print(f"  API エラー、{5 * (attempt + 1)} 秒待つ: {str(e)[:80]}")
+                time.sleep(5 * (attempt + 1))
+                continue
         txt = r.choices[0].message.content or ""
+        m = re.search(r"\{.*\}", txt, flags=re.S)
+        if m:
+            txt = m.group(0)
         txt = re.sub(r"<think>.*?</think>", "", txt, flags=re.S).strip()
         try:
             out = json.loads(txt)["translations"]
@@ -93,7 +104,9 @@ def main() -> None:
     ap.add_argument("--batch", type=int, default=20)
     ap.add_argument("--base-url", default="http://localhost:1234/v1")
     ap.add_argument("--model", default="qwen/qwen3-8b")
+    ap.add_argument("--api-key-env", default=None, help="API キーの環境変数名（Vercel なら AI_GATEWAY_API_KEY）。無指定はキー不要のローカル")
     ap.add_argument("--limit", type=int)
+    ap.add_argument("--retranslate", help="この JSON（英語のリスト）にある項目だけ、厳しい指示で訳し直す")
     args = ap.parse_args()
 
     qs = json.load(open(DATA / "mc_all.json"))
@@ -105,11 +118,21 @@ def main() -> None:
         targets = sorted({o for q in qs for o in q["options"] if o not in letter_opts and not re.fullmatch(r"\d+", o)})
         print(f"文字並べの選択肢 {len(letter_opts)} 種は訳さない")
     cache = load_cache()
+    if args.retranslate:
+        targets = json.load(open(args.retranslate))
+        for t in targets:
+            cache.pop(t, None)
+        global SYSTEM
+        SYSTEM += "\n- 英単語を一切残さない。物の名前は必ず日本語かカタカナにする（stapler→ホチキス、bowl→ボウル、sanitizer→消毒液、beanie→ニット帽、utensil→調理器具）。固有名詞もカタカナにする"
     todo = [t for t in targets if t not in cache]
     if args.limit:
         todo = todo[: args.limit]
     print(f"対象 {len(targets)}、済み {len(targets) - len(todo)}、今回 {len(todo)}")
-    client = OpenAI(api_key="none", base_url=args.base_url)
+    import os
+    from dotenv import load_dotenv
+    load_dotenv(".env")
+    key = os.getenv(args.api_key_env) if args.api_key_env else None
+    client = OpenAI(api_key=key or "none", base_url=args.base_url)
     t0 = time.time()
     for i in range(0, len(todo), args.batch):
         batch = todo[i : i + args.batch]

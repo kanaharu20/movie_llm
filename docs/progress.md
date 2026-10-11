@@ -290,10 +290,7 @@ transformers 5.x は動画ファイルを torchcodec で読もうとするが Ma
 
 ## 今動いているもの
 
-- 無し（PC を閉じるため停止）。次に開いたときにやること:
-  1. 選択肢の翻訳の続き。LM Studio を起動して `lms server start` → `lms load lmstudio-community/Qwen3-8B-MLX-4bit --gpu max -y --identifier qwen3-8b` → `uv run python scripts/pt_translate.py --what options --batch 20`（済みの分は飛ばす。残り約 60 分）
-  2. 翻訳が終わったら `uv run python scripts/pt_convert.py` で学習用の `data/perception_test/items.jsonl` を作る
-  3. Perception Test の映像（26.5GB）は手元では 1MB/s しか出ないので、Colab で取得してフレームだけ Drive に残す。ノートブックを別途作る
+- Colab（CPU）で Perception Test の映像取得とフレーム抜き出し（ユーザーが実行中）
 
 ## 分かってきた注意点
 
@@ -317,9 +314,16 @@ transformers 5.x は動画ファイルを torchcodec で読もうとするが Ma
 - 以後の学習前後の比較は「4B・32フレーム・45.8%」を基準にする
 - つまずき: リポジトリが非公開で Colab からクローンできなかった（公開に変更）。T4 では bfloat16 のエミュレーションで 1問 120秒かかった（GPU 世代で float16 に切り替えるよう修正。A100 では 1問 2.5秒）
 
-## 手順 8: 学習データ候補 Perception Test を調べた（進行中）
+## 手順 8: 学習データ候補 Perception Test を日本語化した
 
-CC BY 4.0 の動画 QA。train + valid で 26,532 問 / 7,215 本、3択、正解位置は均等。counting 系 6,076 問、sequencing 3,772 問があり、ベンチマークで伸びなかった count と temporal を狙える。問いの異なりは 132 種類だけなので翻訳は軽い。映像は 9〜36 秒と短く、長い動画の弱さは直せない。詳細と変換の設計は `docs/perception_test.md`。train の映像（26.5GB）を取得中。
+CC BY 4.0 の動画 QA。train + valid で 26,532 問 / 7,215 本、3択、正解位置は均等。counting 系 6,076 問、sequencing 3,772 問があり、ベンチマークで伸びなかった count と temporal を狙える。詳細と変換の設計は `docs/perception_test.md`。
+
+- 問い 132 種は人手で訳した（`data/perception_test/translations_questions_manual.json`）
+- 選択肢 約 4,500 種はローカルの Qwen3-8B（LM Studio）で訳し、英語が残った 306 件を厳しい指示で訳し直し、それでも残った 178 件を Qwen3-32B（Vercel 経由、Apache-2.0 のモデル）で訳し直した。最終的に英字が残るのは RGB、iPad、ノートPC の類だけ
+- 文字並べ問題の選択肢（bad、dab、wvVcy など）は訳さず原文のまま
+- `scripts/pt_convert.py` で 26,401 問を学習用の形式に変換（count 6,076、spatial 8,041、causal 4,386、temporal 4,186、action 3,712。正解記号は均等）。5,499 問は数を答える open 形式にも変換できる
+- 映像は手元では 1MB/s しか出ないので Colab（CPU）で取得してフレームを Drive に置く（`notebooks/colab_pt_frames.ipynb`）
+- 次は Colab の A100 で学習前の 4B に 1 問 8 回答えさせ、正解率 2〜8 割の問題だけ残す（`scripts/pt_difficulty.py`）
 
 ## 保留している案
 
