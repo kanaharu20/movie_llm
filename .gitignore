@@ -11,3 +11,4 @@ data/jvqa/*.zip
 data/perception_test/raw/
 data/perception_test/items.jsonl
 data/perception_test/items_train.jsonl
+data/perception_test/mc_all.json
