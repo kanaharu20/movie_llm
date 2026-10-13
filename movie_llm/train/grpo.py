@@ -170,9 +170,11 @@ class GRPOTrainer:
                 kw["mm_token_type_ids"] = mm
             ctx = torch.enable_grad() if with_grad else torch.no_grad()
             with ctx:
-                logits = self.model(**kw, use_cache=False).logits  # (B, L, V)
+                # 末尾 k 位置のロジットだけ計算する（prompt 部分の語彙サイズ×長さの巨大なテンソルを作らない）
+                k = L - plen + 1
+                logits = self.model(**kw, use_cache=False, logits_to_keep=k).logits  # (B, k, V) = 位置 plen-1 .. L-1
                 # 位置 t のロジットは t+1 のトークンを予測する
-                lp = torch.log_softmax(logits[:, plen - 1 : L - 1].float(), dim=-1)
+                lp = torch.log_softmax(logits[:, :-1].float(), dim=-1)  # 位置 plen-1 .. L-2
                 tgt = ids[:, plen:L]
                 tok_lp = lp.gather(-1, tgt.unsqueeze(-1)).squeeze(-1)  # (B, L-plen)
             for i, c in enumerate(chunk):
