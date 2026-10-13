@@ -104,11 +104,56 @@ def extract_yes_no(prediction: str | None) -> str | None:
     return min(candidates)[1]
 
 
+# 数を答える形式。先頭の整数（半角に揃えた後）か、漢数字（〇〜九十九）を読む
+_INT = re.compile(r"-?\d+")
+_KANJI = {"〇": 0, "零": 0, "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+_KANJI_NUM = re.compile(r"[〇零一二三四五六七八九]?十[一二三四五六七八九]?|[〇零一二三四五六七八九]")
+
+
+def _kanji_to_int(s: str) -> int:
+    if "十" in s:
+        tens, ones = s.split("十")
+        return (_KANJI[tens] if tens else 1) * 10 + (_KANJI[ones] if ones else 0)
+    return _KANJI[s]
+
+
+def extract_number(prediction: str | None) -> int | None:
+    """モデル出力から答えの整数を取り出す。「3」「3つ」「３回」「三人」「答えは 4 です」など。判断できなければ None。
+
+    算用数字を漢数字より優先する。小数（1.5）は小数点の前の整数部を採る。
+    """
+    p = normalize(prediction)
+    if not p:
+        return None
+    m = _INT.search(p)
+    if m:
+        return int(m.group(0))
+    m = _KANJI_NUM.search(p)
+    if m:
+        return _kanji_to_int(m.group(0))
+    return None
+
+
+def score_numeric(gold: str, prediction: str | None, partial: float = 0.5) -> tuple[float, bool, bool]:
+    """数を答える問題の (報酬 0〜1, 正解か, 数字が読めたか)。差が 1 なら partial、2 以上は 0。"""
+    g = extract_number(gold)
+    n = extract_number(prediction)
+    if g is None or n is None:
+        return 0.0, False, n is not None
+    d = abs(n - g)
+    if d == 0:
+        return 1.0, True, True
+    if d == 1:
+        return partial, False, True
+    return 0.0, False, True
+
+
 def score_rule(item: dict, prediction: str | None) -> int | None:
     """問題と予測から 1 / 3 / None を返す。
 
     - multi_choice: 記号が一致すれば 3、そうでなければ 1
     - yes_no: はい/いいえ が一致すれば 3、そうでなければ 1
+    - numeric（数を答える学習用の形式）: 整数が一致すれば 3、そうでなければ 1
     - open または正解ラベルが壊れている問題: None
     """
     t = item["type"]
@@ -122,4 +167,6 @@ def score_rule(item: dict, prediction: str | None) -> int | None:
         if gold not in (YES, NO):
             return None
         return 3 if extract_yes_no(prediction) == gold else 1
+    if t == "numeric":
+        return 3 if score_numeric(item["answer"], prediction)[1] else 1
     return None

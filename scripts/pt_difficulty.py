@@ -3,7 +3,8 @@
 GRPO はグループ内の正誤にばらつきがないと学習信号が出ない。全問正解・全問不正解の問題を落とし、
 正解率が lo〜hi の範囲の問題だけを学習に使う。
 
-入力: scripts/pt_convert.py が出す items.jsonl（choices / answer / video_id を持つ）
+入力: scripts/pt_convert.py が出す items.jsonl（choices / answer / video_id を持つ）。
+      pt_select.py が出す type=numeric（数を答える）の問題も扱える（正解は整数の一致、差 1 の部分点も集計する）
 出力: <out>/difficulty.jsonl（1行1問、n 本の回答と正解率）。途中から再開できる
 
     uv run python scripts/pt_difficulty.py --items data/perception_test/items.jsonl \\
@@ -20,7 +21,7 @@ import time
 from collections import Counter
 from pathlib import Path
 
-from movie_llm.eval.rules import extract_choice, gold_letter
+from movie_llm.eval.rules import extract_choice, extract_number, gold_letter, score_numeric
 from movie_llm.infer.fetch import video_path
 from movie_llm.infer.qwen3vl import DEFAULT_MODEL, Qwen3VL, build_prompt
 
@@ -33,14 +34,19 @@ def summarize(path: Path, lo: float, hi: float) -> None:
         print("結果なし")
         return
     acc = [r["acc"] for r in rows]
-    n = len(rows[0]["letters"])
+    n = len(rows[0]["preds"])
     hist = Counter(round(a * n) for a in acc)
     print(f"問題数 {len(rows)}、平均正解率 {sum(acc) / len(acc):.3f}")
     print(f"正解数({n}本中)の分布:", dict(sorted(hist.items())))
     bycat = {}
     for r in rows:
         bycat.setdefault(r["category"], []).append(r["acc"])
-    print("category 別の正解率:", {c: round(sum(a) / len(a), 3) for c, a in sorted(bycat.items())})
+    print("category 別の正解率:", {c: f"{sum(a) / len(a):.3f} ({len(a)})" for c, a in sorted(bycat.items())})
+    num = [r for r in rows if r.get("type") == "numeric"]
+    if num:
+        partial = [r["partial"] for r in num]
+        print(f"数を答える問題 {len(num)}: 正解率 {sum(r['acc'] for r in num) / len(num):.3f}、部分点込み {sum(partial) / len(partial):.3f}、"
+              f"数字が読めなかった回答 {sum(r['unparsed'] for r in num)}")
     keep = [r for r in rows if lo <= r["acc"] <= hi]
     print(f"学習に使える（{lo}〜{hi}）: {len(keep)} 問 ({len(keep) / len(rows) * 100:.0f}%)")
     print("  category:", dict(Counter(r["category"] for r in keep)))
@@ -101,23 +107,33 @@ def main() -> None:
             except Exception as e:
                 print(f"[{k}/{len(todo)}] {it['id']} 失敗: {e}")
                 continue
-            gold = gold_letter(it["answer"], it["choices"])
-            letters = [extract_choice(p, it["choices"]) for p in preds]
-            correct = [l == gold for l in letters]
+            if it["type"] == "numeric":
+                gold = it["answer"]
+                parsed = [extract_number(p) for p in preds]
+                scored = [score_numeric(gold, p) for p in preds]
+                correct = [c for _, c, _ in scored]
+                partial = sum(sc for sc, _, _ in scored) / len(scored)
+            else:
+                gold = gold_letter(it["answer"], it["choices"])
+                parsed = [extract_choice(p, it["choices"]) for p in preds]
+                correct = [l == gold for l in parsed]
+                partial = sum(correct) / len(correct)
             rec = {
                 "id": it["id"],
                 "video_id": it["video_id"],
                 "category": it["category"],
+                "type": it["type"],
                 "answer": gold,
                 "preds": preds,
-                "letters": letters,
+                "letters": parsed,  # numeric のときは読み取った整数
                 "acc": sum(correct) / len(correct),
-                "unparsed": sum(l is None for l in letters),
+                "partial": partial,  # numeric: 差 1 を 0.5 とした平均。multi_choice: acc と同じ
+                "unparsed": sum(l is None for l in parsed),
             }
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
             f.flush()
             if k % 10 == 0 or k == 1:
-                print(f"[{k}/{len(todo)}] {it['id']} acc={rec['acc']:.2f} letters={letters} {time.time() - t0:.0f}s")
+                print(f"[{k}/{len(todo)}] {it['id']} acc={rec['acc']:.2f} parsed={parsed} {time.time() - t0:.0f}s")
     print(f"合計 {time.time() - t0:.0f}s")
     summarize(out, args.lo, args.hi)
 

@@ -26,6 +26,14 @@
 
 ## 学習セット（`scripts/pt_select.py`）
 
+1 回目（GRPO run 1）:
+
 - `train_grpo.jsonl`: 1〜7/8 の 2,740 問。各問に学習前の正解率 `base_acc` を付ける
-- `dev_grpo.jsonl`: 学習セットに動画が含まれない問題から無作為に 300 問。全正解・全不正解も含む（偏りのない評価用）。学習後に同じ 300 問で測り、学習前後を比べる
+- `dev_grpo.jsonl`: 学習セットに動画が含まれない問題から無作為に 300 問。全正解・全不正解も含む。**設計の不備**: 学習に使わない易しすぎ・難しすぎの問題に偏り、count が 27 問しか無かった
+
+2 回目以降（現在の `pt_select.py`、詳細は `docs/grpo_run2.md`）:
+
+- 1〜7/8 の問題を動画単位で分け、count 100・temporal 100・他 50 問以上を満たすまで動画を dev に取り分ける
+- `train_grpo2.jsonl`: 2,335 問（count 777、temporal 500）。count で選択肢が全部数字の 684 問は「数字だけで答える」形式（type=numeric）
+- `dev_grpo2.jsonl`: 405 問（count 139、temporal 101）。train と同じ分布、動画は重ならない
 - 本番の評価は Japanese Video-QA（別ドメイン）で行う。dev は学習が進んでいるかの確認用

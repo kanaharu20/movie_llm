@@ -34,6 +34,8 @@ def build_prompt(question: str, qtype: str, choices: list[str]) -> str:
         return f"{question}\n{opts}\n正しい選択肢の記号（A〜D）だけを答えてください。"
     if qtype == "yes_no":
         return f"{question}\n「はい」か「いいえ」で答えてください。"
+    if qtype == "numeric":
+        return f"{question}\n数字だけで答えてください。"
     return f"{question}\n簡潔に答えてください。"
 
 

@@ -1,4 +1,4 @@
-from movie_llm.eval.rules import extract_choice, extract_yes_no, gold_letter, score_rule, split_choices
+from movie_llm.eval.rules import extract_choice, extract_number, extract_yes_no, gold_letter, score_numeric, score_rule, split_choices
 
 CH = ["A) 7種類", "B) 8種類", "C) 9種類", "D) 10種類"]
 
@@ -69,3 +69,27 @@ def test_score_rule():
     assert score_rule(yn_broken, "はい") is None
     op = {"type": "open", "answer": "キャベツ", "choices": []}
     assert score_rule(op, "キャベツ") is None
+
+
+def test_extract_number():
+    assert extract_number("3") == 3
+    assert extract_number("３つ") == 3
+    assert extract_number("答えは 4 です") == 4
+    assert extract_number("三人") == 3
+    assert extract_number("十二") == 12
+    assert extract_number("二十") == 20
+    assert extract_number("0") == 0
+    assert extract_number("1.5回転") == 1
+    assert extract_number("わかりません") is None
+    assert extract_number("") is None
+
+
+def test_score_numeric():
+    assert score_numeric("3", "3つ") == (1.0, True, True)
+    assert score_numeric("3", "4") == (0.5, False, True)
+    assert score_numeric("3", "2回") == (0.5, False, True)
+    assert score_numeric("3", "5") == (0.0, False, True)
+    assert score_numeric("3", "たくさん") == (0.0, False, False)
+    assert score_numeric("3", "4", partial=0.0) == (0.0, False, True)
+    assert score_rule({"type": "numeric", "answer": "3"}, "3個") == 3
+    assert score_rule({"type": "numeric", "answer": "3"}, "4個") == 1

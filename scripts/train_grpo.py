@@ -4,8 +4,8 @@
     uv run python scripts/train_grpo.py --items data/perception_test/smoke_items.jsonl --out results/grpo_smoke \\
         --model Qwen/Qwen3-VL-2B-Instruct --frames 8 --group-size 4 --prompts-per-step 2 --micro-batch 2 --max-steps 2
 
-    # Colab A100: Perception Test の学習セット
-    uv run python scripts/train_grpo.py --items data/perception_test/train_grpo.jsonl --out /content/drive/MyDrive/movie_llm/grpo_4b \\
+    # Colab A100: Perception Test の学習セット（2 回目: count は数を答える形式、動的サンプリング）
+    uv run python scripts/train_grpo.py --items data/perception_test/train_grpo2.jsonl --out /content/drive/MyDrive/movie_llm/grpo2_4b \\
         --model Qwen/Qwen3-VL-4B-Instruct --frames 32 --video-dir /content/pt_videos --frames-dir /content/pt_frames \\
         --group-size 8 --prompts-per-step 4 --micro-batch 4 --max-steps 300 --save-every 20
 """
@@ -35,6 +35,8 @@ def main() -> None:
     ap.add_argument("--max-steps", type=int, default=100)
     ap.add_argument("--save-every", type=int, default=20)
     ap.add_argument("--lora-r", type=int, default=16)
+    ap.add_argument("--numeric-partial", type=float, default=0.5, help="数を答える問題で差 1 のときの報酬")
+    ap.add_argument("--max-draws", type=int, default=12, help="1 ステップで引く問題数の上限（動的サンプリング）")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--no-grad-ckpt", action="store_true")
     args = ap.parse_args()
@@ -45,6 +47,7 @@ def main() -> None:
         group_size=args.group_size, prompts_per_step=args.prompts_per_step, micro_batch=args.micro_batch,
         max_new_tokens=args.max_new_tokens, lr=args.lr, beta=args.beta, max_steps=args.max_steps, save_every=args.save_every,
         lora_r=args.lora_r, seed=args.seed, gradient_checkpointing=not args.no_grad_ckpt,
+        numeric_partial=args.numeric_partial, max_draws=args.max_draws,
     )
     print(f"学習データ {len(items)} 問")
     GRPOTrainer(cfg, items).train()

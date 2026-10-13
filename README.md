@@ -8,7 +8,7 @@
 
 ## 現在の状態
 
-評価基盤と、手元 (MacBook Pro M2 Pro, 16GB) での Qwen3-VL 推論ができた段階。学習・デモはまだ無い。
+評価基盤、手元 (MacBook Pro M2 Pro, 16GB) での Qwen3-VL 推論、Colab A100 での 4B ベースライン、Perception Test を日本語化した学習データ、自前の GRPO（LoRA）学習ループまでできた段階。GRPO 1 回目はベンチマークを動かせず、2 回目の準備中。経過は [docs/progress.md](docs/progress.md)。デモはまだ無い。
 
 ## セットアップ
 
@@ -54,6 +54,18 @@ uv run python scripts/jvqa_eval.py --predictions results/always_B/predictions.js
 ```
 
 予測ファイルの形式、GPT-4o 審判の使い方、自明なベースラインの値は [docs/eval.md](docs/eval.md) を参照。
+
+## 学習（GRPO + LoRA）
+
+学習データは Perception Test（CC BY 4.0）を日本語化したもの（[docs/perception_test.md](docs/perception_test.md)）。学習前の 4B に 8 回ずつ答えさせて全正解・全不正解を除き（[docs/pt_difficulty.md](docs/pt_difficulty.md)）、動画単位で train / dev に分ける。
+
+```bash
+uv run python scripts/pt_select.py                 # train_grpo2.jsonl / dev_grpo2.jsonl を作る（count は数字で答える形式）
+uv run python scripts/train_grpo.py --items data/perception_test/train_grpo2.jsonl --out results/grpo \
+    --model Qwen/Qwen3-VL-4B-Instruct --frames 32 --video-dir <動画> --frames-dir <フレーム> --max-steps 300
+```
+
+学習は Colab A100 で行う（[notebooks/colab_grpo2_4b.ipynb](notebooks/colab_grpo2_4b.ipynb)）。仕組みは `movie_llm/train/grpo.py` の冒頭、1 回目の結果は [docs/grpo_run1.md](docs/grpo_run1.md)、2 回目の設計は [docs/grpo_run2.md](docs/grpo_run2.md)。
 
 ## ライセンス
 
