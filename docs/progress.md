@@ -290,7 +290,7 @@ transformers 5.x は動画ファイルを torchcodec で読もうとするが Ma
 
 ## 今動いているもの
 
-- Colab（CPU）で Perception Test の映像取得とフレーム抜き出し（ユーザーが実行中）
+- 無し
 
 ## 分かってきた注意点
 
@@ -324,6 +324,10 @@ CC BY 4.0 の動画 QA。train + valid で 26,532 問 / 7,215 本、3択、正�
 - `scripts/pt_convert.py` で 26,401 問を学習用の形式に変換（count 6,076、spatial 8,041、causal 4,386、temporal 4,186、action 3,712。正解記号は均等）。5,499 問は数を答える open 形式にも変換できる
 - 映像は手元では 1MB/s しか出ないので Colab（CPU）で取得してフレームを Drive に置く（`notebooks/colab_pt_frames.ipynb`）
 - 次は Colab の A100 で学習前の 4B に 1 問 8 回答えさせ、正解率 2〜8 割の問題だけ残す（`scripts/pt_difficulty.py`）
+
+## 手順 9: 学習前の 4B で問題を選別した
+
+Colab A100 で 7,360 問に 8 回ずつ答えさせた。平均正解率 0.62。全正解 44%、全不正解 19% を除いた **2,740 問**（1〜7/8 正解）を GRPO の学習セットにした。count 916、temporal 601 で、弱点の 2 カテゴリが 55% を占める。評価用に、学習と動画が重ならない 300 問を dev として取り分けた。詳細は `docs/pt_difficulty.md`。
 
 ## 保留している案
 
