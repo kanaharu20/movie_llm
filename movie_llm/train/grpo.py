@@ -241,7 +241,7 @@ class GRPOTrainer:
                 kl_sum += float(kl.detach().sum())
             loss = loss / total_tokens / len(batch)  # 問題数で割って勾配累積
             loss.backward()
-            stats["loss"].append(float(loss) * len(batch)); stats["kl"].append(kl_sum / total_tokens)
+            stats["loss"].append(float(loss.detach()) * len(batch)); stats["kl"].append(kl_sum / total_tokens)
             del cur_lps, ref_lps, loss
 
         torch.nn.utils.clip_grad_norm_([p for p in self.model.parameters() if p.requires_grad], 1.0)
