@@ -21,6 +21,26 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 import torch
+
+
+def _ignore_old_torchao() -> None:
+    """Colab 既定の古い torchao (0.10) が入っていると peft が LoRA を当てる途中で例外を出す。
+    量子化は使わないので、古い版のときは「torchao は無い」と peft に思わせる。"""
+    try:
+        from importlib.metadata import version
+
+        major, minor = (int(x) for x in version("torchao").split(".")[:2])
+        if (major, minor) < (0, 16):
+            import peft.import_utils as piu
+            import peft.tuners.lora.torchao as plt
+
+            piu.is_torchao_available = lambda: False
+            plt.is_torchao_available = lambda: False
+    except Exception:
+        pass
+
+
+_ignore_old_torchao()
 from peft import LoraConfig, PeftModel, get_peft_model
 from transformers import AutoModelForImageTextToText, AutoProcessor
 
