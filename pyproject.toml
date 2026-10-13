@@ -8,6 +8,7 @@ dependencies = [
     "huggingface-hub>=1.0",
     "openai>=3.26.1",
     "pandas>=3.0.6",
+    "peft>=0.15",
     "pillow>=10",
     "pyarrow>=25.0.1",
     "python-dotenv>=1.2.4",

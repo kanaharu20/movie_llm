@@ -33,9 +33,14 @@ def summarize(path: Path, lo: float, hi: float) -> None:
         print("結果なし")
         return
     acc = [r["acc"] for r in rows]
-    hist = Counter(round(a * 8) for a in acc)
+    n = len(rows[0]["letters"])
+    hist = Counter(round(a * n) for a in acc)
     print(f"問題数 {len(rows)}、平均正解率 {sum(acc) / len(acc):.3f}")
-    print("正解数(8本中)の分布:", dict(sorted(hist.items())))
+    print(f"正解数({n}本中)の分布:", dict(sorted(hist.items())))
+    bycat = {}
+    for r in rows:
+        bycat.setdefault(r["category"], []).append(r["acc"])
+    print("category 別の正解率:", {c: round(sum(a) / len(a), 3) for c, a in sorted(bycat.items())})
     keep = [r for r in rows if lo <= r["acc"] <= hi]
     print(f"学習に使える（{lo}〜{hi}）: {len(keep)} 問 ({len(keep) / len(rows) * 100:.0f}%)")
     print("  category:", dict(Counter(r["category"] for r in keep)))
@@ -56,6 +61,8 @@ def main() -> None:
     ap.add_argument("--lo", type=float, default=0.2)
     ap.add_argument("--hi", type=float, default=0.8)
     ap.add_argument("--summarize", action="store_true")
+    ap.add_argument("--adapter", default=None, help="学習した LoRA のフォルダ。学習後の評価に使う")
+    ap.add_argument("--greedy", action="store_true", help="サンプリングせず貪欲法で 1 回答える（評価用。acc は 0 か 1）")
     args = ap.parse_args()
 
     items = [json.loads(l) for l in open(args.items, encoding="utf-8") if l.strip()]
@@ -75,7 +82,7 @@ def main() -> None:
         summarize(out, args.lo, args.hi)
         return
 
-    model = Qwen3VL(args.model, num_frames=args.frames, frames_dir=args.frames_dir)
+    model = Qwen3VL(args.model, num_frames=args.frames, frames_dir=args.frames_dir, adapter=args.adapter)
     print(f"model={args.model} device={model.device} ({model.device_name}, {model.dtype}) frames={args.frames} n={args.n}")
     vdir = Path(args.video_dir)
     t0 = time.time()
@@ -87,7 +94,10 @@ def main() -> None:
                 continue
             prompt = build_prompt(it["question"], it["type"], it["choices"])
             try:
-                preds = model.sample(str(vp), prompt, n=args.n, temperature=args.temperature)
+                if args.greedy:
+                    preds = [model.ask(str(vp), prompt, max_new_tokens=32).text]
+                else:
+                    preds = model.sample(str(vp), prompt, n=args.n, temperature=args.temperature)
             except Exception as e:
                 print(f"[{k}/{len(todo)}] {it['id']} 失敗: {e}")
                 continue

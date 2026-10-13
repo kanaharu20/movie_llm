@@ -40,6 +40,7 @@ def main() -> None:
     ap.add_argument("--video-dir", default="data/jvqa/videos", help="動画の置き場（Colab では Drive のパス）")
     ap.add_argument("--frames-dir", default=None, help="フレームキャッシュの置き場。例: data/jvqa/frames。指定するとデコードを省ける")
     ap.add_argument("--out-dir", default="results", help="出力先のルート（Colab では Drive のパス）")
+    ap.add_argument("--adapter", default=None, help="学習した LoRA のフォルダ（例: results/grpo_4b/step_00300）")
     args = ap.parse_args()
 
     items = load_items()
@@ -65,10 +66,10 @@ def main() -> None:
     if not todo:
         return
 
-    model = Qwen3VL(args.model, device=args.device, num_frames=args.frames, frames_dir=args.frames_dir)
+    model = Qwen3VL(args.model, device=args.device, num_frames=args.frames, frames_dir=args.frames_dir, adapter=args.adapter)
     print(f"model={args.model} device={model.device} ({model.device_name}, {model.dtype}) frames={args.frames} load={model.load_seconds:.1f}s")
     (out_dir / "config.json").write_text(
-        json.dumps({"model": args.model, "frames": args.frames, "max_new_tokens": args.max_new_tokens, "device": model.device, "device_name": model.device_name, "dtype": str(model.dtype), "frames_dir": args.frames_dir}, ensure_ascii=False, indent=2)
+        json.dumps({"model": args.model, "frames": args.frames, "max_new_tokens": args.max_new_tokens, "device": model.device, "device_name": model.device_name, "dtype": str(model.dtype), "frames_dir": args.frames_dir, "adapter": args.adapter}, ensure_ascii=False, indent=2)
     )
 
     t_all = time.time()

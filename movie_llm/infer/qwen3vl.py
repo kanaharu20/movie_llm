@@ -55,6 +55,7 @@ class Qwen3VL:
         max_pixels: int | None = 256 * 28 * 28,
         max_side: int | None = 640,
         frames_dir: str | None = None,
+        adapter: str | None = None,
     ) -> None:
         self.device = pick_device(device)
         if dtype is None:
@@ -78,6 +79,12 @@ class Qwen3VL:
             self.processor.video_processor.size = {"shortest_edge": 128 * 32 * 32, "longest_edge": max_pixels * num_frames}
         t0 = time.time()
         self.model = AutoModelForImageTextToText.from_pretrained(model_id, dtype=dtype).to(self.device).eval()
+        self.adapter = adapter
+        if adapter:
+            # 学習した LoRA を重ねる。merge_and_unload で重みに畳み込むと推論が速い
+            from peft import PeftModel
+
+            self.model = PeftModel.from_pretrained(self.model, adapter).merge_and_unload().eval()
         self.load_seconds = time.time() - t0
 
     @torch.inference_mode()
