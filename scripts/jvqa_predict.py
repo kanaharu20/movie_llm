@@ -22,6 +22,7 @@ print = functools.partial(print, flush=True)  # ログにリダイレクトし�
 
 from movie_llm.eval.dataset import load_items
 from movie_llm.infer.fetch import fetch, video_path
+from movie_llm.eval.timeloc import build_time_prompt, video_duration
 from movie_llm.infer.qwen3vl import DEFAULT_MODEL, Qwen3VL, build_prompt
 
 
@@ -41,6 +42,7 @@ def main() -> None:
     ap.add_argument("--frames-dir", default=None, help="フレームキャッシュの置き場。例: data/jvqa/frames。指定するとデコードを省ける")
     ap.add_argument("--out-dir", default="results", help="出力先のルート（Colab では Drive のパス）")
     ap.add_argument("--adapter", default=None, help="学習した LoRA のフォルダ（例: results/grpo_4b/step_00300）")
+    ap.add_argument("--task", choices=["answer", "time"], default="answer", help="answer: 問いに答える（既定）。time: 問いの場面の時刻を当てる（全 800 問が対象）")
     args = ap.parse_args()
 
     items = load_items()
@@ -69,7 +71,7 @@ def main() -> None:
     model = Qwen3VL(args.model, device=args.device, num_frames=args.frames, frames_dir=args.frames_dir, adapter=args.adapter)
     print(f"model={args.model} device={model.device} ({model.device_name}, {model.dtype}) frames={args.frames} load={model.load_seconds:.1f}s")
     (out_dir / "config.json").write_text(
-        json.dumps({"model": args.model, "frames": args.frames, "max_new_tokens": args.max_new_tokens, "device": model.device, "device_name": model.device_name, "dtype": str(model.dtype), "frames_dir": args.frames_dir, "adapter": args.adapter}, ensure_ascii=False, indent=2)
+        json.dumps({"model": args.model, "task": args.task, "frames": args.frames, "max_new_tokens": args.max_new_tokens, "device": model.device, "device_name": model.device_name, "dtype": str(model.dtype), "frames_dir": args.frames_dir, "adapter": args.adapter}, ensure_ascii=False, indent=2)
     )
 
     t_all = time.time()
@@ -80,9 +82,14 @@ def main() -> None:
             if vp is None:
                 print(f"[{k}/{len(todo)}] idx={it['idx']} 動画なし、飛ばす")
                 continue
-            prompt = build_prompt(it["question"], it["type"], it["choices"])
+            if args.task == "time":
+                prompt = build_time_prompt(it["question"])
+                max_new = max(args.max_new_tokens, 96)
+            else:
+                prompt = build_prompt(it["question"], it["type"], it["choices"])
+                max_new = args.max_new_tokens
             try:
-                r = model.ask(str(vp), prompt, max_new_tokens=args.max_new_tokens)
+                r = model.ask(str(vp), prompt, max_new_tokens=max_new)
             except Exception as e:  # 1問の失敗で全体を止めない
                 print(f"[{k}/{len(todo)}] idx={it['idx']} 失敗: {e}")
                 continue
@@ -96,9 +103,13 @@ def main() -> None:
                 "prompt_tokens": r.prompt_tokens,
                 "seconds": round(r.seconds, 2),
             }
+            if args.task == "time":
+                rec.update(task="time", start_time=it["start_time"], end_time=it["end_time"], frames=args.frames,
+                           video_duration=video_duration(vp, args.frames_dir, args.frames, model.max_side))
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
             f.flush()
-            print(f"[{k}/{len(todo)}] idx={it['idx']} {it['type']} {r.seconds:.1f}s  pred={r.text[:40]!r}  gold={it['answer']!r}")
+            gold = f"{it['start_time']}-{it['end_time']}" if args.task == "time" else it["answer"]
+            print(f"[{k}/{len(todo)}] idx={it['idx']} {it['type']} {r.seconds:.1f}s  pred={r.text[-40:]!r}  gold={gold!r}")
     print(f"合計 {time.time() - t_all:.0f}s")
 
 

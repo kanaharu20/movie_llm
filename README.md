@@ -65,7 +65,7 @@ uv run python scripts/train_grpo.py --items data/perception_test/train_grpo2.jso
     --model Qwen/Qwen3-VL-4B-Instruct --frames 32 --video-dir <動画> --frames-dir <フレーム> --max-steps 300
 ```
 
-学習は Colab A100 で行う（[notebooks/colab_grpo2_4b.ipynb](notebooks/colab_grpo2_4b.ipynb)）。仕組みは `movie_llm/train/grpo.py` の冒頭、1 回目の結果は [docs/grpo_run1.md](docs/grpo_run1.md)、2 回目の設計は [docs/grpo_run2.md](docs/grpo_run2.md)。
+2026-10-14 に用途を「場面の時刻を当てる」（シーン検索）に絞った。経緯と評価の定義は [docs/scene_search.md](docs/scene_search.md)。学習は Colab A100 で行う（[notebooks/colab_grpo2_4b.ipynb](notebooks/colab_grpo2_4b.ipynb)）。仕組みは `movie_llm/train/grpo.py` の冒頭、1 回目の結果は [docs/grpo_run1.md](docs/grpo_run1.md)、2 回目の設計は [docs/grpo_run2.md](docs/grpo_run2.md)。
 
 ## ライセンス
 
