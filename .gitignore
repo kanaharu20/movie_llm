@@ -16,3 +16,4 @@ data/perception_test/smoke_items.jsonl
 data/perception_test/smoke_items2.jsonl
 data/ja/videos/
 data/ja/frames/
+data/ja/api_cache.jsonl

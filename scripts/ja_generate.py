@@ -31,7 +31,8 @@ PROMPT = """上の画像は 1 本の動画から等間隔に抜いた {n} フレ
 この動画について、映像を見れば答えが一つに決まり、映像を見なければ答えられない問題を 6 問作ってください。
 
 内訳:
-- count（数を答える）2 問: 「〜は何人/何個/何回ですか」。答えは整数。フレームに写っている範囲で数えられるものだけ。答えが 0 や 1 になる問題は避ける
+- count（数を答える）2 問: 「〜は何人/何個/何回ですか」。答えは整数。フレームに写っている範囲で数えられるものだけ。答えが 0 や 1 になる問題は避ける。
+  数えた対象を items に 1 つずつ「時刻 + 何か」で列挙し、answer は items の個数と一致させる。同じ対象が複数のフレームに写っていても 1 回だけ数える。列挙できないものは出題しない
 - temporal（順序・時刻）2 問、4 択: 「〜の後に何が起きますか」「〜が映るのは動画のどの時点ですか（序盤/中盤/終盤 または 分:秒 の範囲）」
 - action または spatial 2 問、4 択: 人や物の動作、位置関係、色や向きなど
 
@@ -49,7 +50,7 @@ temporal の「どの時点か」は、「序盤/中盤/終盤」ではなく、
 各問に、答えの根拠となるフレームの時刻を evidence_time に書く。問題文は自然な日本語で、「このフレーム」「画像」という言い方はせず「動画」と書く。
 
 JSON だけを出力:
-{{"questions": [{{"type": "numeric", "category": "count", "question": "...", "choices": null, "answer": "3", "evidence_time": ["00:32"]}},
+{{"questions": [{{"type": "numeric", "category": "count", "question": "...", "choices": null, "items": ["00:32 左の赤い提灯", "00:32 中央の提灯", "00:40 右奥の提灯"], "answer": "3", "evidence_time": ["00:32", "00:40"]}},
                 {{"type": "multi_choice", "category": "temporal", "question": "...", "choices": ["A) ...", "B) ...", "C) ...", "D) ..."], "answer": "B", "evidence_time": ["01:10", "01:20"]}}]}}"""
 
 
@@ -63,9 +64,11 @@ def normalize_item(q: dict, video_id: str, k: int, model: str) -> dict | None:
             "evidence_time": q.get("evidence_time") or [], "gen_model": model}
     if t == "numeric":
         n = extract_number(str(q.get("answer", "")))
-        if n is None or n < 0:
+        items = q.get("items")
+        # 列挙した個数と答えが合わない問題は、数えた根拠が無いので捨てる
+        if n is None or n < 0 or not isinstance(items, list) or len(items) != n:
             return None
-        item.update(type="numeric", choices=[], answer=str(n))
+        item.update(type="numeric", choices=[], answer=str(n), items=[str(x) for x in items])
         return item
     if t == "multi_choice":
         choices = q.get("choices") or []
