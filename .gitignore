@@ -21,3 +21,5 @@ data/ja/api_cache.jsonl
 data/ja/api_cache.jsonl
 data/ja/*_v2.jsonl
 data/ja/time_*.jsonl
+data/ja/train_time.jsonl
+data/ja/dev_time.jsonl

@@ -13,7 +13,9 @@ TRL の GRPOTrainer は動画入力（フレーム列 + 時刻）に対応して
 報酬の形式は問題の type で切り替える:
   - multi_choice: 記号が正解なら 1.0
   - numeric（数を答える）: 一致で 1.0、差 1 で numeric_partial（既定 0.5）、それ以外 0
-  - どちらも、読み取れる形で短く答えたら format_bonus を加える
+  - time（場面の時刻を当てる）: 答えの時刻が start〜end ± 許容幅に入れば 1.0、外れた秒数で線形に減る（movie_llm.eval.timeloc.score_time）。
+    問題には start / end / video_duration（秒）が要る。指示文は評価と同じ build_time_prompt、根拠を書いてから答えるので max_new_tokens は 96 程度
+  - いずれも、読み取れる形で答えたら format_bonus を加える
 
 動的サンプリング（DAPO）: 全回答が同じ報酬の問題は学習信号が無いので飛ばし、別の問題を引いて
 prompts_per_step 問ぶんの信号が集まるまで続ける（上限 max_draws 問）。
@@ -53,6 +55,7 @@ from peft import LoraConfig, PeftModel, get_peft_model
 from transformers import AutoModelForImageTextToText, AutoProcessor
 
 from movie_llm.eval.rules import extract_choice, gold_letter, normalize, score_numeric
+from movie_llm.eval.timeloc import build_time_prompt, extract_time, score_time, tolerance
 from movie_llm.infer.fetch import video_path
 from movie_llm.infer.qwen3vl import build_prompt, pick_device
 from movie_llm.infer.video import sample_frames_cached
@@ -92,9 +95,14 @@ class GRPOConfig:
     gradient_checkpointing: bool = True
 
 
-def reward_fn(pred: str, item: dict, format_bonus: float, numeric_partial: float = 0.5) -> tuple[float, bool, bool]:
+def reward_fn(pred: str, item: dict, format_bonus: float, numeric_partial: float = 0.5, num_frames: int = 32) -> tuple[float, bool, bool]:
     """(報酬, 正解か, 形式が読めたか)。正誤の報酬（0〜1）+ 形式 format_bonus。"""
     short = len(normalize(pred)) <= 40
+    if item["type"] == "time":
+        t = extract_time(pred)
+        score, hit, _ = score_time(t, float(item["start"]), float(item["end"]), tolerance(float(item["video_duration"]), num_frames))
+        parsable = t is not None and "答え" in pred and len(normalize(pred)) <= 300
+        return score + (format_bonus if parsable else 0.0), hit, parsable
     if item["type"] == "numeric":
         score, correct, parsed = score_numeric(item["answer"], pred, numeric_partial)
         parsable = parsed and short
@@ -146,7 +154,11 @@ class GRPOTrainer:
         if vp is None:
             raise FileNotFoundError(item["video_id"])
         frames, meta = sample_frames_cached(str(vp), self.cfg.num_frames, self.cfg.max_side, self.cfg.frames_dir)
-        prompt = build_prompt(item["question"], item["type"], item["choices"])
+        if item["type"] == "time":
+            prompt = build_time_prompt(item["question"])
+            item.setdefault("video_duration", float(meta.duration))
+        else:
+            prompt = build_prompt(item["question"], item["type"], item["choices"])
         messages = [{"role": "user", "content": [{"type": "video"}, {"type": "text", "text": prompt}]}]
         text = self.processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
         enc = self.processor(text=[text], videos=[frames], video_metadata=[meta], do_sample_frames=False, return_tensors="pt")
@@ -233,7 +245,7 @@ class GRPOTrainer:
             enc = self._encode_prompt(item)
             comps = self._sample(enc)
             preds = [self.processor.decode(c, skip_special_tokens=True).strip() for c in comps]
-            rewards, corrects, parsables = zip(*[reward_fn(p, item, cfg.format_bonus, cfg.numeric_partial) for p in preds])
+            rewards, corrects, parsables = zip(*[reward_fn(p, item, cfg.format_bonus, cfg.numeric_partial, cfg.num_frames) for p in preds])
             r = torch.tensor(rewards, dtype=torch.float32, device=self.device)
             adv = r - r.mean()
             if cfg.std_normalize:
