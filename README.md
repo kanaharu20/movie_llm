@@ -67,6 +67,10 @@ uv run python scripts/train_grpo.py --items data/perception_test/train_grpo2.jso
 
 2026-10-14 に用途を「場面の時刻を当てる」（シーン検索）に絞った。経緯と評価の定義は [docs/scene_search.md](docs/scene_search.md)。学習は Colab A100 で行う（[notebooks/colab_grpo2_4b.ipynb](notebooks/colab_grpo2_4b.ipynb)）。仕組みは `movie_llm/train/grpo.py` の冒頭、1 回目の結果は [docs/grpo_run1.md](docs/grpo_run1.md)、2 回目の設計は [docs/grpo_run2.md](docs/grpo_run2.md)。
 
+## 学ぶ（演習）
+
+`learn/` に、本物と同じ構造の GRPO + LoRA を CPU で数秒で回すおもちゃモデルの演習がある（完成版と穴埋め版）。使い方は [learn/README.md](learn/README.md)。
+
 ## ライセンス
 
 Apache-2.0。評価に使うデータセットのライセンスは各配布元に従う（Japanese Video-QA の注釈は CC BY 4.0、研究目的限定）。
