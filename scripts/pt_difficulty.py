@@ -22,6 +22,7 @@ from collections import Counter
 from pathlib import Path
 
 from movie_llm.eval.rules import extract_choice, extract_number, gold_letter, score_numeric
+from movie_llm.eval.timeloc import build_time_prompt, extract_time, score_time, tolerance
 from movie_llm.infer.fetch import video_path
 from movie_llm.infer.qwen3vl import DEFAULT_MODEL, Qwen3VL, build_prompt
 
@@ -40,8 +41,12 @@ def summarize(path: Path, lo: float, hi: float) -> None:
     print(f"正解数({n}本中)の分布:", dict(sorted(hist.items())))
     bycat = {}
     for r in rows:
-        bycat.setdefault(r["category"], []).append(r["acc"])
+        bycat.setdefault(r.get("category") or r.get("domain") or "-", []).append(r["acc"])
     print("category 別の正解率:", {c: f"{sum(a) / len(a):.3f} ({len(a)})" for c, a in sorted(bycat.items())})
+    tm = [r for r in rows if r.get("type") == "time"]
+    if tm:
+        print(f"時刻を当てる問題 {len(tm)}: 正解率 {sum(r['acc'] for r in tm) / len(tm):.3f}、部分点込み {sum(r['partial'] for r in tm) / len(tm):.3f}、"
+              f"時刻を読めなかった回答 {sum(r['unparsed'] for r in tm)}")
     num = [r for r in rows if r.get("type") == "numeric"]
     if num:
         partial = [r["partial"] for r in num]
@@ -98,16 +103,24 @@ def main() -> None:
             if vp is None:
                 print(f"[{k}/{len(todo)}] {it['id']} 動画なし")
                 continue
-            prompt = build_prompt(it["question"], it["type"], it["choices"])
+            is_time = it["type"] == "time"
+            prompt = build_time_prompt(it["question"]) if is_time else build_prompt(it["question"], it["type"], it["choices"])
             try:
                 if args.greedy:
-                    preds = [model.ask(str(vp), prompt, max_new_tokens=32).text]
+                    preds = [model.ask(str(vp), prompt, max_new_tokens=96 if is_time else 32).text]
                 else:
-                    preds = model.sample(str(vp), prompt, n=args.n, temperature=args.temperature)
+                    preds = model.sample(str(vp), prompt, n=args.n, temperature=args.temperature, max_new_tokens=96 if is_time else 32)
             except Exception as e:
                 print(f"[{k}/{len(todo)}] {it['id']} 失敗: {e}")
                 continue
-            if it["type"] == "numeric":
+            if is_time:
+                gold = f"{it['start']}-{it['end']}"
+                tol = tolerance(float(it["video_duration"]), args.frames)
+                parsed = [extract_time(p) for p in preds]
+                scored = [score_time(t, float(it["start"]), float(it["end"]), tol) for t in parsed]
+                correct = [h for _, h, _ in scored]
+                partial = sum(sc for sc, _, _ in scored) / len(scored)
+            elif it["type"] == "numeric":
                 gold = it["answer"]
                 parsed = [extract_number(p) for p in preds]
                 scored = [score_numeric(gold, p) for p in preds]
@@ -121,7 +134,7 @@ def main() -> None:
             rec = {
                 "id": it["id"],
                 "video_id": it["video_id"],
-                "category": it["category"],
+                "category": it.get("category") or it.get("domain"),
                 "type": it["type"],
                 "answer": gold,
                 "preds": preds,
