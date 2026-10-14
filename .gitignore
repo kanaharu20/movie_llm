@@ -14,3 +14,5 @@ data/perception_test/items_train.jsonl
 data/perception_test/mc_all.json
 data/perception_test/smoke_items.jsonl
 data/perception_test/smoke_items2.jsonl
+data/ja/videos/
+data/ja/frames/
