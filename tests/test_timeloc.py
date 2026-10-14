@@ -24,6 +24,9 @@ def test_extract_time():
     assert extract_time("1分42秒ごろです") == 102.0
     assert extract_time("約 35 秒") == 35.0
     assert extract_time("答え: 00:01:05") == 65.0
+    assert extract_time("答え: 304.0") == 304.0
+    assert extract_time("根拠: 冒頭\n答え: 87秒") == 87.0
+    assert extract_time("答え: 0") == 0.0
     assert extract_time("分かりません") is None
 
 

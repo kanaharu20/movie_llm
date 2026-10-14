@@ -73,6 +73,7 @@ _ANS_LINE = re.compile(r"答え\s*[:：]\s*(.+)")
 _MMSS = re.compile(r"(?<!\d)(\d{1,2})[:：](\d{2})(?:[:：](\d{2}))?(?!\d)")
 _JP = re.compile(r"(?:(\d{1,2})\s*分\s*)?(\d{1,3})(?:\.\d+)?\s*秒")
 _JP_MIN = re.compile(r"(\d{1,2})\s*分(?!\d)")
+_BARE = re.compile(r"^\s*(\d{1,4})(?:\.(\d+))?\s*(?:秒|s|sec)?\s*$")  # 「答え: 304.0」「答え: 87」（秒）
 
 
 def extract_time(prediction: str | None) -> float | None:
@@ -81,6 +82,9 @@ def extract_time(prediction: str | None) -> float | None:
         return None
     m = _ANS_LINE.search(p)
     target = m.group(1) if m else p.strip().splitlines()[-1]
+    m = _BARE.match(target)
+    if m:
+        return float(f"{m.group(1)}.{m.group(2) or 0}")
     for text in (target, p):
         m = _MMSS.search(text)
         if m:
@@ -116,7 +120,8 @@ def build_time_prompt(question: str) -> str:
     return (
         "次の問いが指している場面は、動画の何分何秒に映っていますか。\n"
         f"問い: {question}\n"
-        "映像の根拠を 1〜2 行で書き、最後の行に「答え: 1:42」のように時刻を 分:秒 の形で 1 つだけ書いてください。"
+        "映像の根拠を 1〜2 行で書き、最後の行に「答え:」に続けて時刻を 分:秒 の形で 1 つだけ書いてください"
+        "（書き方の例: 0:45、12:03。これは例であり答えではありません）。"
     )
 
 
