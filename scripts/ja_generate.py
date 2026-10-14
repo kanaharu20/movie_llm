@@ -15,6 +15,7 @@ import argparse
 import collections
 import functools
 import json
+import random
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -40,8 +41,11 @@ PROMPT = """上の画像は 1 本の動画から等間隔に抜いた {n} フレ
 - 動画の一部の場面にしか当てはまらないのに、動画全体について聞く曖昧な問題
 - 人物の名前や所属など個人を特定する問題
 - 映像から判断しにくい問題（温度、味、音）
+- 「フレームが何枚」「何枚目の画像」「最終フレーム」など、抜き出したフレームの枚数や並びに依存する問題。動画を通して見た人が答えられる問題にする
+- 「字幕が出た後」「テロップの後」など、文字の表示を手がかりにする問題
 
 4 択は正解 1 つと、映像を見ていないともっともらしい誤答 3 つ。選択肢は "A) …" "B) …" "C) …" "D) …" の形。正解の位置はばらす。
+temporal の「どの時点か」は、「序盤/中盤/終盤」ではなく、動画の長さに応じた時刻の範囲（例: 「0:00〜0:30」「1:30〜2:00」）を選択肢にする。
 各問に、答えの根拠となるフレームの時刻を evidence_time に書く。問題文は自然な日本語で、「このフレーム」「画像」という言い方はせず「動画」と書く。
 
 JSON だけを出力:
@@ -83,7 +87,12 @@ def normalize_item(q: dict, video_id: str, k: int, model: str) -> dict | None:
             letter = m.group(1) if m else None
         if letter is None:
             return None
-        item.update(type="multi_choice", choices=fixed, answer=letter)
+        # モデルは正解を B に置きがちなので、選択肢を並べ直して正解の位置を均す（問題 ID で種を固定）
+        bodies = [split_choices(fixed)[L] for L in LETTERS]
+        gold_body = bodies[LETTERS.index(letter)]
+        random.Random(f"{video_id}_{k}").shuffle(bodies)
+        fixed = [f"{L}) {b}" for L, b in zip(LETTERS, bodies)]
+        item.update(type="multi_choice", choices=fixed, answer=LETTERS[bodies.index(gold_body)])
         return item
     return None
 
