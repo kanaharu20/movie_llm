@@ -74,7 +74,7 @@ class Client:
         key = os.environ.get(api_key_env)
         if not key:
             raise RuntimeError(f"環境変数 {api_key_env} が無い（.env を確認）")
-        self.client = OpenAI(base_url=base_url, api_key=key)
+        self.client = OpenAI(base_url=base_url, api_key=key, timeout=180.0, max_retries=0)  # 回線が切り替わって応答待ちのまま固まるのを防ぐ（再試行は下の chat で行う）
         self.cache_path = Path(cache_path)
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
         self.lock = threading.Lock()
