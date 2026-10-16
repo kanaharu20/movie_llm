@@ -119,9 +119,15 @@ def main() -> None:
                 else:
                     s = e = None
                     pred = "区間なし"
+                probs = r.get("probabilities")
+                if probs is not None:
+                    probs = [round(float(x), 4) for x in probs]
                 rec = {
                     "idx": it["idx"], "video_id": vid, "type": it["type"], "prediction": pred, "answer": it["answer"],
                     "interval": [s, e], "seconds": round((time.time() - t1) / len(qs), 2),
+                    # 信頼度の分析用: 候補ごとの確率（時間順、等間隔）とその最大値。候補 i の時刻 = i * dur / len(probs)
+                    "probabilities": probs, "prob_max": (max(probs) if probs else None),
+                    "extra": {k: v for k, v in r.items() if k not in ("id", "task", "interval", "span", "probabilities", "query")},
                     "task": "time", "start_time": it["start_time"], "end_time": it["end_time"], "frames": args.frames_label, "video_duration": dur,
                 }
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
