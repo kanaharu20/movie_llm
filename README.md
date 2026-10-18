@@ -6,6 +6,31 @@
 
 プロジェクトの説明は [indx-proposal.md](indx-proposal.md)、これまでの作業の記録は [docs/progress.md](docs/progress.md)、保留中の改善案は [docs/ideas.md](docs/ideas.md) を参照。
 
+## デモ: シーン検索（1 コマンド起動）
+
+「〇〇が△△している場面」を日本語で探し、時刻・根拠・候補を返す。1 段目の VideoJev-4B（区間分類、Apache-2.0）が候補区間を出し、2 段目の学習済み Qwen3-VL-4B（LoRA）が確かめて根拠を書く。信頼度で「自動で返す / 候補を確認 / 無い可能性」の 3 段に振り分ける（Japanese Video-QA 722 問で、自動の帯 56% は 95.3%、全体 87.5%。`docs/videojev_eval.md`）。
+
+GPU 24GB 以上（NVIDIA）と nvidia-container-toolkit が必要。初回はモデルの重み約 18GB を取得する。
+
+```bash
+# 1. 学習済み LoRA を models/timeloc-lora/ に置く（Hugging Face: kanaharu20/movie-llm-timeloc-lora）
+uv run hf download kanaharu20/movie-llm-timeloc-lora --local-dir models/timeloc-lora
+# 2. サンプル映像を samples/ に置く（自分の素材、または CC BY の動画を取得）
+uv run python scripts/demo_fetch_samples.py
+# 3. 起動 → http://localhost:7860
+docker compose up
+```
+
+Docker を使わない場合:
+
+```bash
+uv sync --extra demo
+uv run python -m movie_llm.demo.app --adapter models/timeloc-lora --host 0.0.0.0     # ブラウザ
+uv run python scripts/demo.py --video samples/xxx.mp4 --query "赤い鳥居の前で参拝している場面" --ask "何人映っていますか"   # コマンドライン
+```
+
+GPU が手元に無い場合は `notebooks/colab_demo.ipynb`（Colab A100 で起動し、共有リンクを出す）。
+
 ## 現在の状態
 
 評価基盤、手元 (MacBook Pro M2 Pro, 16GB) での Qwen3-VL 推論、Colab A100 での 4B ベースライン、Perception Test を日本語化した学習データ、自前の GRPO（LoRA）学習ループまでできた段階。GRPO 1 回目はベンチマークを動かせず、2 回目の準備中。経過は [docs/progress.md](docs/progress.md)。デモはまだ無い。

@@ -1,0 +1,21 @@
+services:
+  demo:
+    build: .
+    ports:
+      - "7860:7860"
+    volumes:
+      - hf-cache:/cache/hf          # モデルの重み（初回に約 18GB 取得）
+      - ./samples:/app/samples      # サンプル映像（scripts/demo_fetch_samples.py で用意、または自分の素材）
+      - ./models:/app/models        # 学習済み LoRA（models/timeloc-lora/）
+    environment:
+      - MOVIE_LLM_LORA=/app/models/timeloc-lora
+      - HF_TOKEN=${HF_TOKEN:-}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+volumes:
+  hf-cache:

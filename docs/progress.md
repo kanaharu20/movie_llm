@@ -432,6 +432,15 @@ VideoJev の確率（再実行で記録）と 2 段目との一致から、自�
 - 低（8%）: 54.5%（3 候補なら 69.1%）。「見つからない可能性が高い」と添えて人に回す。「該当なし」の境目は、映っていない問いを含む自前素材で決める
 - VideoJev の確率は高めに出る（0.95 以上が 77%）が順序は正しい。一致は確率と独立に効く（pmax ≥ 0.9 でも一致なしは 70%）
 
+## 手順 21: デモを作った（2 段構成 + 3 段の振り分け、1 コマンド起動）
+
+`movie_llm/demo/`（`stage1.py` VideoJev、`stage2.py` 学習済み Qwen3-VL、`confidence.py` 振り分け、`pipeline.py`、`app.py` Gradio）、`scripts/demo.py`（コマンドライン）、`Dockerfile` + `docker-compose.yml`、`notebooks/colab_demo.ipynb`（GPU が無い人向け、共有リンク）。README の先頭に手順。
+
+- 画面: 動画（samples/ か アップロード）と問い → 帯（自動 / 候補を確認 / 無い可能性）、時刻、根拠、候補 3 つのサムネイル、見つけた場面への追加の質問
+- サンプル映像は同梱せず、`scripts/demo_fetch_samples.py` で CC BY の 3 本を取得（ライセンス再確認、出典を ATTRIBUTION.md に）。自分の素材を置くのが望ましい
+- LoRA は `scripts/publish_lora.py` で Hugging Face に公開する（`kanaharu20/movie-llm-timeloc-lora`、要ログイン）。デモは `models/timeloc-lora/` か環境変数 `MOVIE_LLM_LORA` から読む
+- 手元で確認したこと: 2 段目（2B で代用）の切り抜き・当て直し・質問応答、振り分けの単体テスト、Gradio 画面の組み立て。VideoJev と Docker は GPU が無いので未確認 → Colab のノートで通す
+
 ## 保留している案
 
 友人との議論で出たスコア向上の案（データ増強、規約上問題のない教師モデル、安い審判、学習方法の工夫、出力形式の制約）と Colab の使い分けは `docs/ideas.md` にまとめた。
