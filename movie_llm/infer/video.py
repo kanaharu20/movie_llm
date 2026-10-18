@@ -127,6 +127,53 @@ def sample_frames_window(path: str, start: float, end: float, num_frames: int, m
     return arr, meta
 
 
+def clip_video(path: str, start: float, end: float, out_path: str, short_side: int = 360, max_fps: float = 30.0) -> str:
+    """動画の [start, end] 秒を小さな H.264 の mp4 に切り出す（デモで見つけた場面を再生する用）。
+
+    フレームを読み直して再エンコードする（パケットのコピーだと手前のキーフレームまで戻ってしまうため）。
+    2 fps・360px の動画なら 2 分の切り抜きで 1 秒程度。
+    """
+    from fractions import Fraction
+
+    info = probe(path)
+    start = max(0.0, float(start))
+    end = min(float(info.duration), float(end))
+    if end <= start:
+        end = min(info.duration, start + 1.0)
+    fps = max(1, int(round(min(info.fps, max_fps))))
+    with av.open(path) as inp, av.open(str(out_path), "w") as out:
+        vs = inp.streams.video[0]
+        vs.thread_type = "AUTO"
+        scale = min(1.0, short_side / max(1, min(vs.codec_context.width, vs.codec_context.height)))
+        ow = (int(vs.codec_context.width * scale) // 2) * 2
+        oh = (int(vs.codec_context.height * scale) // 2) * 2
+        os_ = out.add_stream("libx264", rate=fps)
+        os_.width, os_.height = ow, oh
+        os_.pix_fmt = "yuv420p"
+        os_.options = {"crf": "26", "preset": "veryfast"}
+        inp.seek(int(max(0.0, start - 1.0) / float(vs.time_base)), stream=vs, backward=True, any_frame=False)
+        step = 1.0 / fps
+        next_t = start
+        n = 0
+        for frame in inp.decode(vs):
+            t = frame.time
+            if t is None or t + 1e-6 < next_t:
+                continue
+            if t > end + 1e-6:
+                break
+            f2 = frame.reformat(width=ow, height=oh, format="yuv420p")
+            f2.pts = n
+            f2.time_base = Fraction(1, fps)
+            for pkt in os_.encode(f2):
+                out.mux(pkt)
+            n += 1
+            next_t += step
+        for pkt in os_.encode(None):
+            out.mux(pkt)
+    if n == 0:
+        raise RuntimeError(f"区間 {start:.1f}-{end:.1f} のフレームを取り出せない: {path}")
+    return str(out_path)
+
 # ---------------------------------------------------------------------------
 # フレームキャッシュ
 # 動画のデコードは CPU が重く、Colab や学習で同じフレームを何度も読む。
