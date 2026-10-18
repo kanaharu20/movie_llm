@@ -27,10 +27,12 @@ def thumbnail(video_path: str, sec: float) -> np.ndarray:
     return arr[0]
 
 
-def build(ss: SceneSearch):
+def build(ss: SceneSearch, samples_dir: Path | None = None):
     import gradio as gr
 
-    sample_files = sorted(str(p) for p in SAMPLES.glob("*.mp4")) if SAMPLES.exists() else []
+    sdir = Path(samples_dir) if samples_dir else SAMPLES
+    sample_files = sorted(str(p) for p in list(sdir.glob("*.mp4")) + list(sdir.glob("*.webm"))) if sdir.exists() else []
+    print(f"サンプル映像: {sdir.resolve()} に {len(sample_files)} 本", flush=True)
 
     def run(sample: str | None, upload: str | None, query: str, top_k: int):
         video = upload or sample
@@ -66,7 +68,7 @@ def build(ss: SceneSearch):
         gr.Markdown("# movie_llm シーン検索\n外に出せない映像を、手元の小さなモデルで日本語検索する。1 段目 VideoJev-4B が候補区間を出し、2 段目の学習済み Qwen3-VL-4B が確かめて根拠を書く。")
         with gr.Row():
             with gr.Column(scale=1):
-                sample = gr.Dropdown(choices=sample_files, label="サンプル映像（samples/）", value=sample_files[0] if sample_files else None)
+                sample = gr.Dropdown(choices=sample_files, label=f"サンプル映像（{sdir}、{len(sample_files)} 本）", value=sample_files[0] if sample_files else None, allow_custom_value=True)
                 upload = gr.Video(label="または動画をアップロード", sources=["upload"])
                 query = gr.Textbox(label="探したい場面（日本語）", placeholder="例: 赤い鳥居の前で参拝している場面")
                 top_k = gr.Slider(1, 5, value=3, step=1, label="候補の数")
@@ -89,10 +91,11 @@ def main() -> None:
     ap.add_argument("--port", type=int, default=7860)
     ap.add_argument("--adapter", default=None, help="学習済み LoRA のフォルダ。無ければ環境変数 MOVIE_LLM_LORA")
     ap.add_argument("--max-frames", type=int, default=1024, help="VideoJev に入れる最大フレーム数（24GB の GPU なら 1024、40GB なら 2048）")
+    ap.add_argument("--samples", default=None, help="サンプル映像のフォルダ（既定: 環境変数 MOVIE_LLM_SAMPLES か samples/）")
     ap.add_argument("--share", action="store_true")
     args = ap.parse_args()
     ss = SceneSearch(adapter=args.adapter, stage1_kwargs={"max_frames": args.max_frames})
-    build(ss).launch(server_name=args.host, server_port=args.port, share=args.share)
+    build(ss, args.samples).launch(server_name=args.host, server_port=args.port, share=args.share)
 
 
 if __name__ == "__main__":
