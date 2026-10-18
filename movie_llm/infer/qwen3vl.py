@@ -91,8 +91,13 @@ class Qwen3VL:
 
     @torch.inference_mode()
     def ask(self, video_path: str, prompt: str, max_new_tokens: int = 64, num_frames: int | None = None) -> GenResult:
-        t0 = time.time()
         frames, meta = sample_frames_cached(video_path, num_frames or self.num_frames, self.max_side, self.frames_dir)
+        return self.ask_frames(frames, meta, prompt, max_new_tokens)
+
+    @torch.inference_mode()
+    def ask_frames(self, frames, meta, prompt: str, max_new_tokens: int = 64) -> GenResult:
+        """抜き出し済みのフレーム（T, H, W, 3）とメタデータで質問する。切り抜き区間（sample_frames_window）用。"""
+        t0 = time.time()
         messages = [{"role": "user", "content": [{"type": "video"}, {"type": "text", "text": prompt}]}]
         text = self.processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
         inputs = self.processor(

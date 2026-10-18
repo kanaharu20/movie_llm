@@ -70,6 +70,63 @@ def sample_frames(path: str, num_frames: int, max_side: int | None = None) -> tu
     return arr, meta
 
 
+def sample_frames_window(path: str, start: float, end: float, num_frames: int, max_side: int | None = None) -> tuple[np.ndarray, VideoMetadata]:
+    """動画の [start, end] 秒の区間だけを等間隔に num_frames 枚抜き、切り抜き動画として扱えるメタデータを返す。
+
+    2 段構成（VideoJev が出した候補区間の前後だけを Qwen3-VL に見せる）用。
+    メタデータの時刻は区間の先頭を 0 秒とする（モデルの答えに start を足し戻すのは呼び出し側）。
+    """
+    info = probe(path)
+    start = max(0.0, float(start))
+    end = min(float(info.duration), float(end))
+    if end <= start:
+        end = min(info.duration, start + 1.0)
+    n = max(1, num_frames)
+    targets_t = np.linspace(start, end, n)
+    frames: list[np.ndarray] = []
+    times: list[float] = []
+    with av.open(path) as c:
+        s = c.streams.video[0]
+        s.thread_type = "AUTO"
+        # 区間の少し手前へシーク（キーフレーム単位なので手前に着く）
+        c.seek(int(max(0.0, start - 1.0) / float(s.time_base)), stream=s, backward=True, any_frame=False)
+        k = 0
+        last = None
+        for frame in c.decode(s):
+            t = frame.time
+            if t is None:
+                continue
+            while k < n and t >= targets_t[k] - 1e-6:
+                src = last if (last is not None and abs(last[0] - targets_t[k]) < abs(t - targets_t[k])) else (t, frame)
+                f = src[1]
+                if max_side and max(f.width, f.height) > max_side:
+                    scale = max_side / max(f.width, f.height)
+                    f = f.reformat(width=int(f.width * scale) // 2 * 2, height=int(f.height * scale) // 2 * 2)
+                frames.append(f.to_ndarray(format="rgb24"))
+                times.append(float(src[0]))
+                k += 1
+            last = (t, frame)
+            if k >= n or t > end + 2.0:
+                break
+    if not frames:
+        raise RuntimeError(f"区間 {start:.1f}-{end:.1f} のフレームを取り出せない: {path}")
+    while len(frames) < n:  # 末尾が足りなければ最後のフレームで埋める
+        frames.append(frames[-1])
+        times.append(times[-1])
+    arr = np.stack(frames)
+    fps = info.fps
+    meta = VideoMetadata(
+        total_num_frames=max(1, int(round((end - start) * fps))),
+        fps=fps,
+        width=arr.shape[2],
+        height=arr.shape[1],
+        duration=end - start,
+        video_backend="pyav",
+        frames_indices=[max(0, int(round((t - start) * fps))) for t in times],
+    )
+    return arr, meta
+
+
 # ---------------------------------------------------------------------------
 # フレームキャッシュ
 # 動画のデコードは CPU が重く、Colab や学習で同じフレームを何度も読む。
