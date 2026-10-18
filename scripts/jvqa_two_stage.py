@@ -39,7 +39,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--vj-predictions", required=True, help="VideoJev の predictions.jsonl")
     ap.add_argument("--name", default="two_stage-4b")
-    ap.add_argument("--model", default=DEFAULT_MODEL)
+    ap.add_argument("--model", default="Qwen/Qwen3-VL-4B-Instruct", help="LoRA は 4B 用なので既定は 4B")
     ap.add_argument("--adapter", default=None)
     ap.add_argument("--video-dir", default="data/jvqa/videos_small")
     ap.add_argument("--out-dir", default="results")
