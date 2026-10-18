@@ -11,6 +11,8 @@
 
 from __future__ import annotations
 
+import math
+
 HI_PMAX = 0.98
 LO_PMEAN = 0.5
 AGREE_SEC = 5.0
@@ -29,7 +31,7 @@ def interval_stats(probs: list[float], interval: tuple[float, float], duration: 
     step = duration / len(probs)
     s, e = interval
     lo = max(0, int(s / step))
-    hi = min(len(probs), max(lo + 1, int(e / step) + 1))
+    hi = min(len(probs), max(lo + 1, math.ceil(e / step - 1e-9)))  # 候補 i は [i*step, (i+1)*step)。end が境目に乗るとき次の候補を含めない
     seg = probs[lo:hi]
     return float(max(probs)), float(sum(seg) / len(seg))
 

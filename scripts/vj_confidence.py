@@ -20,6 +20,7 @@ import argparse
 import json
 from pathlib import Path
 
+from movie_llm.demo.confidence import interval_stats
 from movie_llm.eval.timeloc import score_time
 
 
@@ -69,10 +70,7 @@ def main() -> None:
         K = len(p)
         step = dur / K
         s, e = P[i]["interval"]
-        lo = max(0, int(s / step))
-        hi = min(K, max(lo + 1, int(e / step) + 1))
-        pmean = sum(p[lo:hi]) / (hi - lo)
-        pmax = max(p)
+        pmax, pmean = interval_stats(p, (s, e), dur)
         t2 = TS.get(i, {}).get("stage2_abs_sec")
         agree = t2 is not None and (s - args.agree_sec) <= t2 <= (e + args.agree_sec)
         ans = t2 if agree else (s + e) / 2
