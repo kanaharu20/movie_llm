@@ -54,9 +54,12 @@ def main() -> None:
     ap.add_argument("--hi-pmax", type=float, default=0.985, help="自動で返す帯の pmax の下限")
     ap.add_argument("--lo-pmean", type=float, default=0.5, help="該当なしにする帯の pmean の上限")
     ap.add_argument("--agree-sec", type=float, default=5.0)
+    ap.add_argument("--out", default=None, help="confidence.md を書くフォルダ（既定: --vj のフォルダ）")
     args = ap.parse_args()
 
     vj = Path(args.vj)
+    out = Path(args.out) if args.out else vj
+    out.mkdir(parents=True, exist_ok=True)
     P = {r["idx"]: r for r in map(json.loads, open(vj / "predictions.jsonl", encoding="utf-8"))}
     I = {r["idx"]: r for r in map(json.loads, open(vj / "items_time.jsonl", encoding="utf-8"))}
     ts_path = Path(args.ts) / "predictions.jsonl"
@@ -120,8 +123,8 @@ def main() -> None:
         if sub:
             lines.append(f"| {thr} | {len(sub)} | {len(sub)/n_all:.0%} | {sum(r['hit'] for r in sub)/len(sub):.1%} |")
     report = "\n".join(lines) + "\n"
-    (vj / "confidence.md").write_text(report, encoding="utf-8")
-    with (vj / "confidence_items.jsonl").open("w", encoding="utf-8") as f:
+    (out / "confidence.md").write_text(report, encoding="utf-8")
+    with (out / "confidence_items.jsonl").open("w", encoding="utf-8") as f:
         for r in rows:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
     print(report)
