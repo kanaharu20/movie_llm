@@ -4,6 +4,28 @@
 
 番組制作会社のディレクターが、外部に出せない未公開の収録素材から「〇〇が△△している場面」を日本語で探せるようになり、素材確認にかかる時間を大幅に減らせる。
 
+A small video-understanding model for searching unaired footage in Japanese, on your own machine. Built during an internship at INDX (INDX Summer of Code 2026).
+
+## 結果 / Results
+
+Japanese Video-QA の時刻の課題（722 問）で、場面の時刻を当てた割合。
+
+Share of correctly localized scenes on the timestamp questions of Japanese Video-QA (722 questions).
+
+| 構成 / Setup | 全体 / All | 短い動画 / Short | 長い動画 / Medium |
+|---|---|---|---|
+| Qwen3-VL-4B（学習前 / base、32 frames） | 55.4% | 77.1% | 32.5% |
+| ＋ GRPO + LoRA（自前実装 / self-written、64 frames） | 72.4% | 88.1% | 55.8% |
+| VideoJev-4B（区間分類 / interval classifier） | 83.4% | 87.1% | 79.5% |
+| **2 段構成 / Two-stage**（VideoJev → 学習済み Qwen3-VL） | **87.5%** | **91.4%** | **83.5%** |
+
+- 生成で時刻を書く方式（GRPO）は長い動画の後半に弱いと分かり、製品の中核を区間分類の VideoJev に乗り換えた。学習済み Qwen3-VL は確認・根拠・質問応答の役にした。
+- 2 つのモデルの一致を信頼度にして「自動で返す / 候補を確認 / 無い可能性」の 3 段に振り分ける。自動で返す帯（全体の 56%）の正解率は 95.3%。
+- Generating a timestamp as text (GRPO) was weak on the second half of long videos, so the core moved to the interval classifier VideoJev; the trained Qwen3-VL now verifies, explains and answers follow-up questions.
+- Agreement between the two models is used as confidence to route each query to auto-answer / human check / probably-absent. The auto-answer band (56% of queries) is 95.3% correct.
+
+詳細 / Details: [docs/videojev_eval.md](docs/videojev_eval.md), [docs/progress.md](docs/progress.md)
+
 プロジェクトの説明は [indx-proposal.md](indx-proposal.md)、これまでの作業の記録は [docs/progress.md](docs/progress.md)、保留中の改善案は [docs/ideas.md](docs/ideas.md) を参照。
 
 ## デモ: シーン検索（1 コマンド起動）
@@ -33,7 +55,7 @@ GPU が手元に無い場合は `notebooks/colab_demo.ipynb`（Colab A100 で起
 
 ## 現在の状態
 
-評価基盤、手元 (MacBook Pro M2 Pro, 16GB) での Qwen3-VL 推論、Colab A100 での 4B ベースライン、Perception Test を日本語化した学習データ、自前の GRPO（LoRA）学習ループまでできた段階。GRPO 1 回目はベンチマークを動かせず、2 回目の準備中。経過は [docs/progress.md](docs/progress.md)。デモはまだ無い。
+評価基盤、日本語の場面データ（3,475 件）、自前の GRPO（LoRA）学習、VideoJev との比較、2 段構成と信頼度での振り分け、1 コマンドで起動するデモまでできた。次は、自前で撮った未編集素材と「映っていない場面」の問いで精度と「該当なし」の境目を測ること。経過は [docs/progress.md](docs/progress.md)。
 
 ## セットアップ
 
